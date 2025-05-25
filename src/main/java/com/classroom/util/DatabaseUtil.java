@@ -60,10 +60,12 @@ public class DatabaseUtil {
                         course_id INTEGER PRIMARY KEY AUTOINCREMENT,
                         course_name TEXT NOT NULL,
                         course_code TEXT UNIQUE NOT NULL,
-                        description TEXT
+                        description TEXT,
+                        credit_hours INTEGER NOT NULL
                     )
                 """;
 
+        // In the createTables method, update the Schedule table creation:
         String createScheduleTable = """
                     CREATE TABLE IF NOT EXISTS Schedule (
                         schedule_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,7 +77,9 @@ public class DatabaseUtil {
                         room TEXT NOT NULL,
                         program_type TEXT NOT NULL,
                         FOREIGN KEY (course_id) REFERENCES Courses(course_id),
-                        FOREIGN KEY (instructor_id) REFERENCES Users(user_id)
+                        FOREIGN KEY (instructor_id) REFERENCES Users(user_id),
+                        CHECK (start_time < end_time),
+                        CHECK (program_type IN ('Regular', 'Evening'))
                     )
                 """;
 
