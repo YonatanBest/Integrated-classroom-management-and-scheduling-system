@@ -7,8 +7,6 @@ import com.classroom.util.ColorScheme;
 
 import javax.swing.*;
 import java.awt.*;
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -86,7 +84,7 @@ public class CalendarPanel extends JPanel {
                 roomFilter.addItem(room);
             }
             roomFilter.addActionListener(e -> refreshCalendar());
-            
+
             filterPanel.add(roomLabel);
             filterPanel.add(roomFilter);
         }

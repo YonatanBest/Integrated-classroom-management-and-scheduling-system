@@ -16,7 +16,7 @@ import java.awt.event.ActionListener;
 public class CourseDialog extends JDialog implements ActionListener {
     private JTextField codeField;
     private JTextField nameField;
-    private JTextField creditHoursField; // Add this field declaration
+    private JTextField creditHoursField; // Add this field
     private JTextArea descriptionArea;
     private JButton saveButton;
     private JButton cancelButton;
@@ -73,26 +73,29 @@ public class CourseDialog extends JDialog implements ActionListener {
 
         // Credit Hours
         gbc.gridx = 0;
-        gbc.gridy = 3;
+        gbc.gridy = 2;
         gbc.weightx = 0.0;
+        gbc.weighty = 0.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         JLabel creditHoursLabel = new JLabel("Credit Hours:");
         formPanel.add(creditHoursLabel, gbc);
+
         gbc.gridx = 1;
-        gbc.gridy = 3;
+        gbc.gridy = 2;
         gbc.weightx = 1.0;
-        creditHoursField = new JTextField(15); // Use the class field instead of local variable
+        creditHoursField = new JTextField(15);
         UIUtils.styleTextField(creditHoursField);
         formPanel.add(creditHoursField, gbc);
 
         // Description
         gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridy = 3; // Changed from 2 to 3
         gbc.weightx = 0.0;
         JLabel descriptionLabel = new JLabel("Description:");
         formPanel.add(descriptionLabel, gbc);
 
         gbc.gridx = 1;
-        gbc.gridy = 2;
+        gbc.gridy = 3; // Changed from 2 to 3
         gbc.weightx = 1.0;
         gbc.weighty = 1.0;
         gbc.fill = GridBagConstraints.BOTH;
@@ -100,6 +103,8 @@ public class CourseDialog extends JDialog implements ActionListener {
         descriptionArea.setLineWrap(true);
         descriptionArea.setWrapStyleWord(true);
         JScrollPane scrollPane = new JScrollPane(descriptionArea);
+        formPanel.add(scrollPane, gbc);
+
         UIUtils.styleTextArea(descriptionArea);
         formPanel.add(scrollPane, gbc);
 
@@ -140,10 +145,10 @@ public class CourseDialog extends JDialog implements ActionListener {
         // Validate input
         String code = codeField.getText().trim();
         String name = nameField.getText().trim();
-        String creditHoursStr = creditHoursField.getText().trim(); // Get value from creditHoursField
+        String creditHours = creditHoursField.getText().trim();
         String description = descriptionArea.getText().trim();
 
-        if (code.isEmpty() || name.isEmpty() || creditHoursStr.isEmpty()) {
+        if (code.isEmpty() || name.isEmpty() || creditHours.isEmpty()) {
             JOptionPane.showMessageDialog(this,
                     "Course code, name, and credit hours are required",
                     "Missing Information",
@@ -152,8 +157,8 @@ public class CourseDialog extends JDialog implements ActionListener {
         }
 
         try {
-            int creditHours = Integer.parseInt(creditHoursStr);
-            if (creditHours <= 0) {
+            int credits = Integer.parseInt(creditHours);
+            if (credits <= 0) {
                 JOptionPane.showMessageDialog(this,
                         "Credit hours must be a positive number",
                         "Invalid Input",
@@ -165,7 +170,7 @@ public class CourseDialog extends JDialog implements ActionListener {
             Course course = new Course();
             course.setCourseCode(code);
             course.setCourseName(name);
-            course.setCreditHours(creditHours);
+            course.setCreditHours(credits);
             course.setDescription(description);
 
             // Save to database

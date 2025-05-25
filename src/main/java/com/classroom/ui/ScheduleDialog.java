@@ -3,18 +3,21 @@ package com.classroom.ui;
 import com.classroom.dao.CourseDAO;
 import com.classroom.dao.ScheduleDAO;
 import com.classroom.dao.UserDAO;
+import com.classroom.dao.ResourceDAO;
 import com.classroom.model.Course;
 import com.classroom.model.Schedule;
 import com.classroom.model.User;
+import com.classroom.model.Resource;
+import com.classroom.model.ScheduleResource;
 import com.classroom.util.ColorScheme;
 import com.classroom.util.UIUtils;
+import com.classroom.util.TimeSlotUtil;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.awt.event.*;
 import java.util.List;
-import com.classroom.util.TimeSlotUtil;
+import java.util.ArrayList;
 
 /**
  * Dialog for adding or editing a schedule.
@@ -28,9 +31,11 @@ public class ScheduleDialog extends JDialog implements ActionListener {
     private JComboBox<String> endTimeCombo;
     private JTextField roomField;
     private JComboBox<String> programTypeCombo;
+    private JCheckBox resourcesCheckBox;
     private JButton saveButton;
     private JButton cancelButton;
     private boolean confirmed = false;
+    private List<Resource> availableResources;
 
     private static final String[] DAYS = {
             "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
@@ -46,7 +51,7 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         super(parent, schedule == null ? "Add Schedule" : "Edit Schedule", true);
         this.schedule = schedule;
 
-        setSize(500, 400);
+        setSize(500, 450); // Increased height for resource controls
         setLocationRelativeTo(parent);
         setResizable(false);
 
@@ -171,6 +176,28 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         UIUtils.styleComboBox(programTypeCombo);
         formPanel.add(programTypeCombo, gbc);
 
+        // Resources Panel
+        gbc.gridx = 0;
+        gbc.gridy = 7;
+        gbc.weightx = 0.0;
+        JLabel resourcesLabel = new JLabel("Required Resources:");
+        formPanel.add(resourcesLabel, gbc);
+
+        gbc.gridx = 1;
+        gbc.gridy = 7;
+        gbc.weightx = 1.0;
+        resourcesCheckBox = new JCheckBox("Projector and Connector needed");
+        resourcesCheckBox.setBackground(Color.WHITE);
+        formPanel.add(resourcesCheckBox, gbc);
+
+        JPanel resourcesPanel = new JPanel(new GridLayout(2, 1, 5, 5));
+        resourcesPanel.setBackground(Color.WHITE);
+
+        gbc.gridx = 1;
+        gbc.gridy = 7;
+        gbc.weightx = 1.0;
+        formPanel.add(resourcesPanel, gbc);
+
         // Button panel
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.setBackground(Color.WHITE);
@@ -193,6 +220,14 @@ public class ScheduleDialog extends JDialog implements ActionListener {
 
         // Set content pane
         setContentPane(mainPanel);
+
+        // Add room field listener
+        roomField.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                updateAvailableResources();
+            }
+        });
 
         // If editing, populate fields
         if (schedule != null) {
@@ -252,6 +287,30 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         } else {
             programTypeCombo.setSelectedIndex(0);
         }
+
+        // Set resources
+        if (schedule.getRequiredResources() != null) {
+            for (ScheduleResource resource : schedule.getRequiredResources()) {
+                Resource r = ResourceDAO.getResourceById(resource.getResourceId());
+                if (r != null) {
+                    // If either a projector or connector is needed, check the box
+                    if (r.getResourceType().equals("Projector") || r.getResourceType().equals("Connector")) {
+                        resourcesCheckBox.setSelected(true);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Update available resources
+        updateAvailableResources();
+    }
+
+    private void updateAvailableResources() {
+        String room = roomField.getText().trim();
+        if (!room.isEmpty()) {
+            availableResources = ResourceDAO.getAvailableResources(room);
+        }
     }
 
     @Override
@@ -263,10 +322,47 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         }
     }
 
+    private boolean checkResourceAvailability(String day, String startTime, String endTime) {
+        // Get total resources available (10 sets of projector+connector)
+        int totalResources = 10;
+
+        // Get all schedules for the given day and time range
+        List<Schedule> conflictingSchedules = ScheduleDAO.getSchedulesInTimeRange(day, startTime, endTime);
+        int resourcesInUse = 0;
+
+        for (Schedule s : conflictingSchedules) {
+            // Skip current schedule if editing
+            if (schedule != null && s.getScheduleId() == schedule.getScheduleId()) {
+                continue;
+            }
+            // Check if this schedule uses resources
+            List<ScheduleResource> scheduleResources = ScheduleDAO.getScheduleResources(s.getScheduleId());
+            if (!scheduleResources.isEmpty()) {
+                resourcesInUse++;
+            }
+        }
+
+        return resourcesInUse < totalResources;
+    }
+
     private void saveSchedule() {
         // Validate input fields
         if (!validateFields()) {
             return;
+        }
+
+        String day = (String) dayCombo.getSelectedItem();
+        String startTime = (String) startTimeCombo.getSelectedItem();
+        String endTime = (String) endTimeCombo.getSelectedItem();
+
+        if (resourcesCheckBox.isSelected()) {
+            if (!checkResourceAvailability(day, startTime, endTime)) {
+                JOptionPane.showMessageDialog(this,
+                        "No resources available for the selected time slot.",
+                        "Resource Not Available",
+                        JOptionPane.ERROR_MESSAGE);
+                return;
+            }
         }
 
         // Create schedule object
@@ -328,9 +424,21 @@ public class ScheduleDialog extends JDialog implements ActionListener {
             return;
         }
 
-        // Save the schedule
-        boolean success = schedule == null ? ScheduleDAO.addSchedule(newSchedule)
-                : ScheduleDAO.updateSchedule(newSchedule);
+        // Create resource requirements
+        List<ScheduleResource> resources = new ArrayList<>();
+        if (resourcesCheckBox.isSelected()) {
+            // Add both projector and connector as a set
+            Resource projectorResource = findResource("Projector");
+            Resource connectorResource = findResource("Connector");
+            if (projectorResource != null && connectorResource != null) {
+                resources.add(new ScheduleResource(0, projectorResource.getResourceId(), 1));
+                resources.add(new ScheduleResource(0, connectorResource.getResourceId(), 1));
+            }
+        }
+
+        // Save schedule with resources
+        boolean success = schedule == null ? ScheduleDAO.addScheduleWithResources(newSchedule, resources)
+                : ScheduleDAO.updateScheduleWithResources(newSchedule, resources);
 
         if (success) {
             confirmed = true;
@@ -343,8 +451,15 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         }
     }
 
-    public boolean isConfirmed() {
-        return confirmed;
+    private Resource findResource(String type) {
+        if (availableResources != null) {
+            for (Resource resource : availableResources) {
+                if (resource.getResourceType().equals(type)) {
+                    return resource;
+                }
+            }
+        }
+        return null;
     }
 
     private boolean validateFields() {
@@ -406,5 +521,9 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         }
 
         return true;
+    }
+
+    public boolean isConfirmed() {
+        return confirmed;
     }
 }

@@ -95,11 +95,36 @@ public class DatabaseUtil {
                     )
                 """;
 
+        String createResourcesTable = """
+                    CREATE TABLE IF NOT EXISTS Resources (
+                        resource_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        room TEXT NOT NULL,
+                        resource_type TEXT NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        status TEXT NOT NULL,
+                        last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CHECK (status IN ('Available', 'In Use', 'Maintenance'))
+                    )
+                """;
+
+        String createScheduleResourcesTable = """
+                    CREATE TABLE IF NOT EXISTS ScheduleResources (
+                        schedule_id INTEGER NOT NULL,
+                        resource_id INTEGER NOT NULL,
+                        quantity_needed INTEGER NOT NULL,
+                        FOREIGN KEY (schedule_id) REFERENCES Schedule(schedule_id),
+                        FOREIGN KEY (resource_id) REFERENCES Resources(resource_id),
+                        PRIMARY KEY (schedule_id, resource_id)
+                    )
+                """;
+
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(createUsersTable);
             stmt.execute(createCoursesTable);
             stmt.execute(createScheduleTable);
             stmt.execute(createEnrollmentsTable);
+            stmt.execute(createResourcesTable);
+            stmt.execute(createScheduleResourcesTable);
         }
     }
 

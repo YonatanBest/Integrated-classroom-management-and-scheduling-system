@@ -2,7 +2,7 @@ package com.classroom.dao;
 
 import com.classroom.model.Schedule;
 import com.classroom.util.DatabaseUtil;
-
+import com.classroom.model.ScheduleResource;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -65,28 +65,68 @@ public class ScheduleDAO {
     /**
      * Update an existing schedule.
      */
-    public static boolean updateSchedule(Schedule schedule) {
-        String sql = "UPDATE Schedule SET course_id = ?, instructor_id = ?, day_of_week = ?, " +
-                "start_time = ?, end_time = ?, room = ?, program_type = ? WHERE schedule_id = ?";
+    public static boolean updateScheduleWithResources(Schedule schedule, List<ScheduleResource> resources) {
+        Connection conn = null;
+        try {
+            conn = DatabaseUtil.getConnection();
+            conn.setAutoCommit(false);
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            // First update the schedule
+            String scheduleSql = "UPDATE Schedule SET course_id = ?, instructor_id = ?, day_of_week = ?, " +
+                    "start_time = ?, end_time = ?, room = ?, program_type = ? WHERE schedule_id = ?";
 
-            pstmt.setInt(1, schedule.getCourseId());
-            pstmt.setInt(2, schedule.getInstructorId());
-            pstmt.setString(3, schedule.getDayOfWeek());
-            pstmt.setString(4, schedule.getStartTime());
-            pstmt.setString(5, schedule.getEndTime());
-            pstmt.setString(6, schedule.getRoom());
-            pstmt.setString(7, schedule.getProgramType());
-            pstmt.setInt(8, schedule.getScheduleId());
+            try (PreparedStatement pstmt = conn.prepareStatement(scheduleSql)) {
+                pstmt.setInt(1, schedule.getCourseId());
+                pstmt.setInt(2, schedule.getInstructorId());
+                pstmt.setString(3, schedule.getDayOfWeek());
+                pstmt.setString(4, schedule.getStartTime());
+                pstmt.setString(5, schedule.getEndTime());
+                pstmt.setString(6, schedule.getRoom());
+                pstmt.setString(7, schedule.getProgramType());
+                pstmt.setInt(8, schedule.getScheduleId());
 
-            int affectedRows = pstmt.executeUpdate();
-            return affectedRows > 0;
+                pstmt.executeUpdate();
 
+                // Delete existing resources
+                String deleteResourcesSql = "DELETE FROM ScheduleResources WHERE schedule_id = ?";
+                try (PreparedStatement deleteStmt = conn.prepareStatement(deleteResourcesSql)) {
+                    deleteStmt.setInt(1, schedule.getScheduleId());
+                    deleteStmt.executeUpdate();
+                }
+
+                // Insert new resources
+                String resourceSql = "INSERT INTO ScheduleResources (schedule_id, resource_id, quantity_needed) VALUES (?, ?, ?)";
+                try (PreparedStatement resourceStmt = conn.prepareStatement(resourceSql)) {
+                    for (ScheduleResource resource : resources) {
+                        resourceStmt.setInt(1, schedule.getScheduleId());
+                        resourceStmt.setInt(2, resource.getResourceId());
+                        resourceStmt.setInt(3, resource.getQuantityNeeded());
+                        resourceStmt.executeUpdate();
+                    }
+                }
+
+                conn.commit();
+                return true;
+            }
         } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+            }
             e.printStackTrace();
             return false;
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
 
@@ -279,7 +319,7 @@ public class ScheduleDAO {
                 "JOIN Users u ON s.instructor_id = u.user_id " +
                 "WHERE s.day_of_week = ? AND s.schedule_id != ? AND " +
                 "((s.room = ? OR s.instructor_id = ?) AND " +
-                "(? < s.end_time AND ? > s.start_time))";
+                "(s.start_time < ? AND s.end_time > ?))"; // Modified condition
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -288,8 +328,8 @@ public class ScheduleDAO {
             pstmt.setInt(2, schedule.getScheduleId());
             pstmt.setString(3, schedule.getRoom());
             pstmt.setInt(4, schedule.getInstructorId());
-            pstmt.setString(5, schedule.getEndTime());
-            pstmt.setString(6, schedule.getStartTime());
+            pstmt.setString(5, schedule.getEndTime()); // Swapped parameter order
+            pstmt.setString(6, schedule.getStartTime()); // Swapped parameter order
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 return rs.next(); // Returns true if there's a conflict
@@ -335,5 +375,129 @@ public class ScheduleDAO {
             e.printStackTrace();
             return "Error checking conflicts";
         }
+    }
+
+    public static boolean addScheduleWithResources(Schedule schedule, List<ScheduleResource> resources) {
+        Connection conn = null;
+        try {
+            conn = DatabaseUtil.getConnection();
+            conn.setAutoCommit(false);
+
+            // First insert the schedule
+            String scheduleSql = "INSERT INTO Schedule (course_id, instructor_id, day_of_week, start_time, end_time, room, program_type) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+            try (PreparedStatement pstmt = conn.prepareStatement(scheduleSql, Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setInt(1, schedule.getCourseId());
+                pstmt.setInt(2, schedule.getInstructorId());
+                pstmt.setString(3, schedule.getDayOfWeek());
+                pstmt.setString(4, schedule.getStartTime());
+                pstmt.setString(5, schedule.getEndTime());
+                pstmt.setString(6, schedule.getRoom());
+                pstmt.setString(7, schedule.getProgramType());
+
+                int affectedRows = pstmt.executeUpdate();
+
+                if (affectedRows > 0) {
+                    try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                        if (generatedKeys.next()) {
+                            int scheduleId = generatedKeys.getInt(1);
+
+                            // Add resources if any
+                            if (!resources.isEmpty()) {
+                                String resourceSql = "INSERT INTO ScheduleResources (schedule_id, resource_id, quantity_needed) VALUES (?, ?, ?)";
+                                try (PreparedStatement resourceStmt = conn.prepareStatement(resourceSql)) {
+                                    for (ScheduleResource resource : resources) {
+                                        resourceStmt.setInt(1, scheduleId);
+                                        resourceStmt.setInt(2, resource.getResourceId());
+                                        resourceStmt.setInt(3, resource.getQuantityNeeded());
+                                        resourceStmt.executeUpdate();
+                                    }
+                                }
+                            }
+
+                            conn.commit();
+                            return true;
+                        }
+                    }
+                }
+
+                conn.rollback();
+                return false;
+
+            }
+        } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+            }
+            e.printStackTrace();
+            return false;
+        } finally {
+            try {
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public static List<ScheduleResource> getScheduleResources(int scheduleId) {
+        List<ScheduleResource> resources = new ArrayList<>();
+        String sql = "SELECT * FROM ScheduleResources WHERE schedule_id = ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, scheduleId);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    resources.add(new ScheduleResource(
+                            rs.getInt("schedule_id"),
+                            rs.getInt("resource_id"),
+                            rs.getInt("quantity_needed")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return resources;
+    }
+
+    public static List<Schedule> getSchedulesInTimeRange(String day, String startTime, String endTime) {
+        List<Schedule> schedules = new ArrayList<>();
+        String sql = "SELECT s.*, c.course_name, c.course_code, u.full_name as instructor_name " +
+                "FROM Schedule s " +
+                "JOIN Courses c ON s.course_id = c.course_id " +
+                "JOIN Users u ON s.instructor_id = u.user_id " +
+                "WHERE s.day_of_week = ? AND " +
+                "? < s.end_time AND ? > s.start_time";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, day);
+            pstmt.setString(2, startTime);
+            pstmt.setString(3, endTime);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Schedule schedule = extractScheduleFromResultSet(rs);
+                    schedule.setRequiredResources(getScheduleResources(schedule.getScheduleId()));
+                    schedules.add(schedule);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return schedules;
     }
 }

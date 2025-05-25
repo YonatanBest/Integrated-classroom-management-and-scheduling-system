@@ -1,5 +1,7 @@
 package com.classroom.model;
 
+import java.util.List;
+
 /**
  * Represents a course schedule in the system.
  */
@@ -17,6 +19,9 @@ public class Schedule {
     private String courseName;
     private String courseCode;
     private String instructorName;
+
+    // Add new fields for resource tracking
+    private List<ScheduleResource> requiredResources;
 
     // Constructor
     public Schedule(int scheduleId, int courseId, int instructorId, String dayOfWeek,
@@ -127,5 +132,13 @@ public class Schedule {
     @Override
     public String toString() {
         return courseCode + " - " + startTime + " to " + endTime + " in " + room;
+    }
+
+    public List<ScheduleResource> getRequiredResources() {
+        return requiredResources;
+    }
+
+    public void setRequiredResources(List<ScheduleResource> requiredResources) {
+        this.requiredResources = requiredResources;
     }
 }
