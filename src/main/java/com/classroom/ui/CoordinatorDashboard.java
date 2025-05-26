@@ -253,47 +253,44 @@ public class CoordinatorDashboard extends JFrame implements ActionListener {
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Title and Room Assignment Panel
+        // Create header panel
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(Color.WHITE);
 
-        JLabel titleLabel = new JLabel("Student Management");
+        JLabel titleLabel = new JLabel("Students by Course");
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
         titleLabel.setForeground(ColorScheme.PRIMARY);
 
-        // Room Assignment Controls
-        JPanel roomAssignPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JComboBox<String> roomComboBox = new JComboBox<>();
-        List<String> rooms = ScheduleDAO.getAllRooms();
-        for (String room : rooms) {
-            roomComboBox.addItem(room);
+        // Create course filter
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        filterPanel.setBackground(Color.WHITE);
+
+        JLabel filterLabel = new JLabel("Filter by Course:");
+        courseFilterCombo = new JComboBox<>();
+        courseFilterCombo.addItem(new Course(0, "All Courses", "", "", 0));
+        List<Course> courses = CourseDAO.getAllCourses();
+        for (Course course : courses) {
+            courseFilterCombo.addItem(course);
         }
 
-        JButton assignRoomButton = new JButton("Assign Room");
-        UIUtils.styleButton(assignRoomButton, ColorScheme.PRIMARY);
-
-        assignRoomButton.addActionListener(e -> {
-            int selectedRow = studentsTable.getSelectedRow();
-            if (selectedRow >= 0) {
-                int studentId = (int) studentsTable.getValueAt(selectedRow, 0);
-                String selectedRoom = (String) roomComboBox.getSelectedItem();
-                assignRoomToStudent(studentId, selectedRoom);
-            } else {
-                JOptionPane.showMessageDialog(this,
-                        "Please select a student first",
-                        "Warning",
-                        JOptionPane.WARNING_MESSAGE);
+        courseFilterCombo.addActionListener(e -> {
+            Course selectedCourse = (Course) courseFilterCombo.getSelectedItem();
+            if (selectedCourse != null) {
+                if (selectedCourse.getCourseId() == 0) {
+                    loadStudentsData(); // Load all students
+                } else {
+                    loadStudentsByCourse(selectedCourse.getCourseId());
+                }
             }
         });
 
-        roomAssignPanel.add(new JLabel("Assign Room: "));
-        roomAssignPanel.add(roomComboBox);
-        roomAssignPanel.add(assignRoomButton);
+        filterPanel.add(filterLabel);
+        filterPanel.add(courseFilterCombo);
 
         headerPanel.add(titleLabel, BorderLayout.WEST);
-        headerPanel.add(roomAssignPanel, BorderLayout.EAST);
+        headerPanel.add(filterPanel, BorderLayout.EAST);
 
-        // Update students table model to include room
+        // Create table model
         studentsTableModel = new DefaultTableModel() {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -321,6 +318,21 @@ public class CoordinatorDashboard extends JFrame implements ActionListener {
     private void loadStudentsData() {
         studentsTableModel.setRowCount(0);
         List<User> students = UserDAO.getAllStudents();
+
+        for (User student : students) {
+            studentsTableModel.addRow(new Object[] {
+                    student.getUserId(),
+                    student.getFullName(),
+                    student.getEmail(),
+                    student.getProgramType(),
+                    student.getAssignedRoom() != null ? student.getAssignedRoom() : "Not Assigned"
+            });
+        }
+    }
+
+    private void loadStudentsByCourse(int courseId) {
+        studentsTableModel.setRowCount(0);
+        List<User> students = UserDAO.getStudentsByCourse(courseId);
 
         for (User student : students) {
             studentsTableModel.addRow(new Object[] {
@@ -476,6 +488,12 @@ public class CoordinatorDashboard extends JFrame implements ActionListener {
                     studentsTableModel.setValueAt(room, i, 4); // Update room column
                     break;
                 }
+            }
+
+            // Update the user object if it exists
+            User student = UserDAO.getUserById(studentId);
+            if (student != null) {
+                student.setAssignedRoom(room);
             }
 
             // Refresh the calendar view

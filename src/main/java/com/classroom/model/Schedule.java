@@ -1,6 +1,7 @@
 package com.classroom.model;
 
 import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Represents a course schedule in the system.
@@ -20,7 +21,7 @@ public class Schedule {
     private String courseCode;
     private String instructorName;
 
-    // Add new fields for resource tracking
+    // Required resources for this schedule
     private List<ScheduleResource> requiredResources;
 
     // Constructor
@@ -34,10 +35,12 @@ public class Schedule {
         this.endTime = endTime;
         this.room = room;
         this.programType = programType;
+        this.requiredResources = new ArrayList<>();
     }
 
     // Default constructor
     public Schedule() {
+        this.requiredResources = new ArrayList<>();
     }
 
     // Getters and Setters
@@ -140,5 +143,12 @@ public class Schedule {
 
     public void setRequiredResources(List<ScheduleResource> requiredResources) {
         this.requiredResources = requiredResources;
+    }
+
+    public void addRequiredResource(ScheduleResource resource) {
+        if (this.requiredResources == null) {
+            this.requiredResources = new ArrayList<>();
+        }
+        this.requiredResources.add(resource);
     }
 }

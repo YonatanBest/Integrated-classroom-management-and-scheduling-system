@@ -7,7 +7,6 @@ import com.classroom.util.ColorScheme;
 
 import javax.swing.*;
 import java.awt.*;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,8 +40,6 @@ public class CalendarPanel extends JPanel {
     private static final String[] DAYS_OF_WEEK = {
             "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
     };
-
-    private DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
 
     public CalendarPanel(User user) {
         this.currentUser = user;
@@ -154,11 +151,12 @@ public class CalendarPanel extends JPanel {
         // Get schedules
         List<Schedule> schedules;
         if (currentUser.isStudent()) {
-            if (selectedRoom != null && !selectedRoom.trim().isEmpty()) {
-                // Get schedules for student's assigned room
-                schedules = ScheduleDAO.getSchedulesByRoom(selectedRoom);
+            String assignedRoom = currentUser.getAssignedRoom();
+            if (assignedRoom != null && !assignedRoom.trim().isEmpty()) {
+                // Get schedules only for student's assigned room
+                schedules = ScheduleDAO.getSchedulesByRoom(assignedRoom);
             } else {
-                // Fallback to student's enrolled courses if no room assigned
+                // If no room assigned, show only enrolled courses
                 schedules = ScheduleDAO.getSchedulesByStudentId(currentUser.getUserId());
             }
         } else {
@@ -180,6 +178,14 @@ public class CalendarPanel extends JPanel {
         Map<String, Map<String, Schedule>> scheduleMap = new HashMap<>();
 
         for (Schedule schedule : schedules) {
+            // For students, only show courses in their assigned room
+            if (currentUser.isStudent()) {
+                String assignedRoom = currentUser.getAssignedRoom();
+                if (!schedule.getRoom().equals(assignedRoom)) {
+                    continue; // Skip courses not in student's assigned room
+                }
+            }
+
             String day = schedule.getDayOfWeek();
             String startTime = schedule.getStartTime();
 
@@ -335,7 +341,8 @@ public class CalendarPanel extends JPanel {
     }
 
     private JPanel createScheduleCell(Schedule schedule) {
-        JPanel panel = new JPanel(new BorderLayout());
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
 
         // If no schedule exists for this time slot, return an empty panel
@@ -344,64 +351,98 @@ public class CalendarPanel extends JPanel {
             return panel;
         }
 
-        // Choose color based on program type
-        if ("regular".equalsIgnoreCase(schedule.getProgramType())) {
-            panel.setBackground(new Color(220, 237, 200)); // Light green
-        } else {
-            panel.setBackground(new Color(213, 232, 212)); // Slightly darker green
+        // For coordinator viewing all rooms, check for overlapping schedules
+        if (!currentUser.isStudent() && "All Rooms".equals(roomFilter.getSelectedItem())) {
+            List<Schedule> overlappingSchedules = ScheduleDAO.getSchedulesInTimeRange(
+                    schedule.getDayOfWeek(), schedule.getStartTime(), schedule.getEndTime());
+
+            if (overlappingSchedules.size() > 1) {
+                panel.setBackground(new Color(240, 240, 255)); // Light blue for multiple schedules
+
+                // Create a scrollable panel for multiple schedules
+                JPanel scrollContent = new JPanel();
+                scrollContent.setLayout(new BoxLayout(scrollContent, BoxLayout.Y_AXIS));
+                scrollContent.setBackground(panel.getBackground());
+
+                for (Schedule s : overlappingSchedules) {
+                    JPanel coursePanel = createCourseInfoPanel(s);
+                    scrollContent.add(coursePanel);
+                    scrollContent.add(Box.createVerticalStrut(5));
+                }
+
+                JScrollPane scrollPane = new JScrollPane(scrollContent);
+                scrollPane.setPreferredSize(new Dimension(200, 100));
+                scrollPane.setBorder(null);
+                panel.add(scrollPane);
+
+                return panel;
+            }
         }
+
+        // Single schedule display
+        panel.setBackground("regular".equalsIgnoreCase(schedule.getProgramType()) ? new Color(220, 237, 200)
+                : new Color(213, 232, 212));
+
+        JPanel coursePanel = createCourseInfoPanel(schedule);
+        panel.add(coursePanel);
+
+        return panel;
+    }
+
+    private JPanel createCourseInfoPanel(Schedule schedule) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setOpaque(false);
+        panel.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
 
         JLabel courseLabel = new JLabel(schedule.getCourseCode());
         courseLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        courseLabel.setBorder(BorderFactory.createEmptyBorder(2, 5, 0, 5));
 
         JLabel timeLabel = new JLabel(schedule.getStartTime() + " - " + schedule.getEndTime());
         timeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-        timeLabel.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 5));
 
         JLabel roomLabel = new JLabel("Room: " + schedule.getRoom());
         roomLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-        roomLabel.setBorder(BorderFactory.createEmptyBorder(0, 5, 2, 5));
 
-        JPanel infoPanel = new JPanel();
-        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
-        infoPanel.setOpaque(false);
-        infoPanel.add(courseLabel);
-        infoPanel.add(timeLabel);
-        infoPanel.add(roomLabel);
+        panel.add(courseLabel);
+        panel.add(timeLabel);
+        panel.add(roomLabel);
 
-        // Make the cell a button to show details
-        JButton detailsButton = new JButton();
-        detailsButton.setLayout(new BorderLayout());
-        detailsButton.add(infoPanel, BorderLayout.CENTER);
-        detailsButton.setBorderPainted(false);
-        detailsButton.setContentAreaFilled(false);
-        detailsButton.setFocusPainted(false);
+        // Make the panel clickable to show details
+        panel.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                String details = String.format(
+                        "<html><b>%s - %s</b><br>" +
+                                "Time: %s - %s<br>" +
+                                "Room: %s<br>" +
+                                "Instructor: %s<br>" +
+                                "Program: %s</html>",
+                        schedule.getCourseCode(),
+                        schedule.getCourseName(),
+                        schedule.getStartTime(),
+                        schedule.getEndTime(),
+                        schedule.getRoom(),
+                        schedule.getInstructorName(),
+                        schedule.getProgramType().substring(0, 1).toUpperCase() +
+                                schedule.getProgramType().substring(1));
 
-        detailsButton.addActionListener(e -> {
-            String details = String.format(
-                    "<html><b>%s - %s</b><br>" +
-                            "Time: %s - %s<br>" +
-                            "Room: %s<br>" +
-                            "Instructor: %s<br>" +
-                            "Program: %s</html>",
-                    schedule.getCourseCode(),
-                    schedule.getCourseName(),
-                    schedule.getStartTime(),
-                    schedule.getEndTime(),
-                    schedule.getRoom(),
-                    schedule.getInstructorName(),
-                    schedule.getProgramType().substring(0, 1).toUpperCase() + schedule.getProgramType().substring(1));
+                JOptionPane.showMessageDialog(
+                        CalendarPanel.this,
+                        details,
+                        "Course Details",
+                        JOptionPane.INFORMATION_MESSAGE);
+            }
 
-            JOptionPane.showMessageDialog(
-                    this,
-                    details,
-                    "Course Details",
-                    JOptionPane.INFORMATION_MESSAGE);
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                panel.setBackground(new Color(230, 230, 230));
+            }
+
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                panel.setBackground(panel.getParent().getBackground());
+            }
         });
 
-        panel.add(detailsButton, BorderLayout.CENTER);
-
+        panel.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return panel;
     }
 

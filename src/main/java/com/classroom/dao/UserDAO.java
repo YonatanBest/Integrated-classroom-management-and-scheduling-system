@@ -11,58 +11,66 @@ import java.util.List;
  * Data Access Object for User-related database operations.
  */
 public class UserDAO {
-    
+
     /**
      * Authenticate a user with username and password.
      */
     public static User authenticateUser(String username, String password) {
         String sql = "SELECT * FROM users WHERE username = ? AND password = ?";
         Connection conn = null;
-        
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+
         try {
             conn = DatabaseUtil.getConnection();
-            PreparedStatement pstmt = conn.prepareStatement(sql);
-            
+            pstmt = conn.prepareStatement(sql);
+
             pstmt.setString(1, username);
             pstmt.setString(2, password);
-            
-            ResultSet rs = pstmt.executeQuery();
+
+            rs = pstmt.executeQuery();
             if (rs.next()) {
                 User user = extractUserFromResultSet(rs);
                 conn.commit();
                 return user;
             }
             conn.rollback();
-            
+            return null;
+
         } catch (SQLException e) {
-            try {
-                if (conn != null) {
-                    conn.rollback();
-                }
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
             e.printStackTrace();
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+            }
+            return null;
         } finally {
             try {
-                if (conn != null && !conn.isClosed()) {
+                if (rs != null) {
+                    rs.close();
+                }
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (conn != null) {
                     conn.close();
                 }
             } catch (SQLException e) {
                 e.printStackTrace();
             }
         }
-        
-        return null;
     }
-    
+
     /**
      * Register a new user.
      */
     public static boolean registerUser(User user) {
         String checkSql = "SELECT COUNT(*) FROM users WHERE username = ?";
         String insertSql = "INSERT INTO users (username, password, full_name, email, user_type, program_type) VALUES (?, ?, ?, ?, ?, ?)";
-        
+
         try (Connection conn = DatabaseUtil.getConnection()) {
             // Check for existing username
             try (PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
@@ -73,7 +81,7 @@ public class UserDAO {
                     return false;
                 }
             }
-            
+
             // If username doesn't exist, proceed with insertion
             try (PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
                 pstmt.setString(1, user.getUsername());
@@ -82,7 +90,7 @@ public class UserDAO {
                 pstmt.setString(4, user.getEmail());
                 pstmt.setString(5, user.getUserType());
                 pstmt.setString(6, user.getProgramType());
-                
+
                 int affectedRows = pstmt.executeUpdate();
                 if (affectedRows > 0) {
                     conn.commit(); // Commit the transaction if successful
@@ -102,18 +110,18 @@ public class UserDAO {
         }
         return false;
     }
-    
+
     /**
      * Get user by ID.
      */
     public static User getUserById(int userId) {
         String sql = "SELECT * FROM Users WHERE user_id = ?";
-        
+
         try (Connection conn = DatabaseUtil.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
             pstmt.setInt(1, userId);
-            
+
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
                     return extractUserFromResultSet(rs);
@@ -122,66 +130,66 @@ public class UserDAO {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        
+
         return null;
     }
-    
+
     /**
      * Get all instructors.
      */
     public static List<User> getAllInstructors() {
         List<User> instructors = new ArrayList<>();
         String sql = "SELECT * FROM Users WHERE user_type = 'instructor'";
-        
+
         try (Connection conn = DatabaseUtil.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(sql)) {
+
             while (rs.next()) {
                 instructors.add(extractUserFromResultSet(rs));
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        
+
         return instructors;
     }
-    
+
     /**
      * Get all students.
      */
     public static List<User> getAllStudents() {
         List<User> students = new ArrayList<>();
         String sql = "SELECT * FROM Users WHERE user_type = 'student'";
-        
+
         try (Connection conn = DatabaseUtil.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(sql)) {
+
             while (rs.next()) {
                 students.add(extractUserFromResultSet(rs));
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        
+
         return students;
     }
-    
+
     /**
      * Get students enrolled in a specific course.
      */
     public static List<User> getStudentsByCourse(int courseId) {
         List<User> students = new ArrayList<>();
         String sql = "SELECT u.* FROM Users u " +
-                     "JOIN Enrollments e ON u.user_id = e.student_id " +
-                     "WHERE e.course_id = ? AND u.user_type = 'student'";
-        
+                "JOIN Enrollments e ON u.user_id = e.student_id " +
+                "WHERE e.course_id = ? AND u.user_type = 'student'";
+
         try (Connection conn = DatabaseUtil.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
             pstmt.setInt(1, courseId);
-            
+
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
                     students.add(extractUserFromResultSet(rs));
@@ -190,10 +198,10 @@ public class UserDAO {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        
+
         return students;
     }
-    
+
     /**
      * Helper method to create a User object from ResultSet.
      */
@@ -206,23 +214,25 @@ public class UserDAO {
         user.setEmail(rs.getString("email"));
         user.setUserType(rs.getString("user_type"));
         user.setProgramType(rs.getString("program_type"));
+        user.setAssignedRoom(rs.getString("assigned_room"));
         return user;
     }
-    
+
     /**
      * Assign a room to a student.
      */
     public static boolean assignRoom(int studentId, String room) {
         String sql = "UPDATE users SET assigned_room = ? WHERE user_id = ? AND user_type = 'student'";
-        
+
         Connection conn = null;
+        PreparedStatement pstmt = null;
         try {
             conn = DatabaseUtil.getConnection();
-            PreparedStatement pstmt = conn.prepareStatement(sql);
-            
+            pstmt = conn.prepareStatement(sql);
+
             pstmt.setString(1, room);
             pstmt.setInt(2, studentId);
-            
+
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows > 0) {
                 conn.commit();
@@ -230,7 +240,7 @@ public class UserDAO {
             }
             conn.rollback();
             return false;
-            
+
         } catch (SQLException e) {
             e.printStackTrace();
             if (conn != null) {
@@ -242,28 +252,31 @@ public class UserDAO {
             }
             return false;
         } finally {
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
                 }
+                if (conn != null) {
+                    conn.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
             }
         }
     }
-    
+
     /**
      * Get all students assigned to a specific room.
      */
     public static List<User> getStudentsByRoom(String room) {
         List<User> students = new ArrayList<>();
         String sql = "SELECT * FROM users WHERE assigned_room = ? AND user_type = 'student'";
-        
+
         try (Connection conn = DatabaseUtil.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
             pstmt.setString(1, room);
-            
+
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
                     students.add(extractUserFromResultSet(rs));
@@ -272,7 +285,7 @@ public class UserDAO {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        
+
         return students;
     }
 
@@ -282,18 +295,18 @@ public class UserDAO {
     public static List<User> getUnassignedStudents() {
         List<User> students = new ArrayList<>();
         String sql = "SELECT * FROM users WHERE assigned_room IS NULL AND user_type = 'student'";
-        
+
         try (Connection conn = DatabaseUtil.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(sql)) {
+
             while (rs.next()) {
                 students.add(extractUserFromResultSet(rs));
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        
+
         return students;
     }
 }

@@ -36,6 +36,8 @@ public class ScheduleDialog extends JDialog implements ActionListener {
     private JButton cancelButton;
     private boolean confirmed = false;
     private List<Resource> availableResources;
+    private boolean isNewSchedule;
+    private int scheduleId;
 
     private static final String[] DAYS = {
             "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
@@ -50,6 +52,8 @@ public class ScheduleDialog extends JDialog implements ActionListener {
     public ScheduleDialog(JFrame parent, Schedule schedule) {
         super(parent, schedule == null ? "Add Schedule" : "Edit Schedule", true);
         this.schedule = schedule;
+        this.isNewSchedule = (schedule == null);
+        this.scheduleId = (schedule == null) ? 0 : schedule.getScheduleId();
 
         setSize(500, 450); // Increased height for resource controls
         setLocationRelativeTo(parent);
@@ -282,7 +286,7 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         roomField.setText(schedule.getRoom());
 
         // Set program type
-        if ("evening".equalsIgnoreCase(schedule.getProgramType())) {
+        if ("Evening".equalsIgnoreCase(schedule.getProgramType())) {
             programTypeCombo.setSelectedIndex(1);
         } else {
             programTypeCombo.setSelectedIndex(0);
@@ -346,85 +350,23 @@ public class ScheduleDialog extends JDialog implements ActionListener {
     }
 
     private void saveSchedule() {
-        // Validate input fields
-        if (!validateFields()) {
+        // Validate input
+        if (!validateInput()) {
             return;
-        }
-
-        String day = (String) dayCombo.getSelectedItem();
-        String startTime = (String) startTimeCombo.getSelectedItem();
-        String endTime = (String) endTimeCombo.getSelectedItem();
-
-        if (resourcesCheckBox.isSelected()) {
-            if (!checkResourceAvailability(day, startTime, endTime)) {
-                JOptionPane.showMessageDialog(this,
-                        "No resources available for the selected time slot.",
-                        "Resource Not Available",
-                        JOptionPane.ERROR_MESSAGE);
-                return;
-            }
         }
 
         // Create schedule object
-        Schedule newSchedule = new Schedule();
-        if (schedule != null) {
-            newSchedule.setScheduleId(schedule.getScheduleId());
-        }
+        Schedule schedule = new Schedule();
+        schedule.setScheduleId(scheduleId);
+        schedule.setCourseId(((Course) courseCombo.getSelectedItem()).getCourseId());
+        schedule.setInstructorId(((User) instructorCombo.getSelectedItem()).getUserId());
+        schedule.setDayOfWeek((String) dayCombo.getSelectedItem());
+        schedule.setStartTime((String) startTimeCombo.getSelectedItem());
+        schedule.setEndTime((String) endTimeCombo.getSelectedItem());
+        schedule.setRoom(roomField.getText().trim());
+        schedule.setProgramType((String) programTypeCombo.getSelectedItem());
 
-        Course selectedCourse = (Course) courseCombo.getSelectedItem();
-        User selectedInstructor = (User) instructorCombo.getSelectedItem();
-
-        newSchedule.setCourseId(selectedCourse.getCourseId());
-        newSchedule.setInstructorId(selectedInstructor.getUserId());
-        newSchedule.setDayOfWeek((String) dayCombo.getSelectedItem());
-        newSchedule.setStartTime((String) startTimeCombo.getSelectedItem());
-        newSchedule.setEndTime((String) endTimeCombo.getSelectedItem());
-        newSchedule.setRoom(roomField.getText().trim());
-        newSchedule.setProgramType((String) programTypeCombo.getSelectedItem());
-
-        // Validate time range
-        if (!TimeSlotUtil.isValidTimeRange(newSchedule.getStartTime(), newSchedule.getEndTime())) {
-            JOptionPane.showMessageDialog(this,
-                    "End time must be after start time",
-                    "Invalid Time Range",
-                    JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        // Check program time validity
-        boolean isRegularProgram = newSchedule.getProgramType().equalsIgnoreCase("Regular");
-        if (isRegularProgram && !TimeSlotUtil.isValidRegularProgramTime(
-                newSchedule.getDayOfWeek(), newSchedule.getStartTime(), newSchedule.getEndTime())) {
-            JOptionPane.showMessageDialog(this,
-                    "Invalid time slot for regular program\n" +
-                            "Regular program runs Monday-Friday, 8:00-17:00 (excluding 12:00-13:00)",
-                    "Invalid Time Slot",
-                    JOptionPane.ERROR_MESSAGE);
-            return;
-        } else if (!isRegularProgram && !TimeSlotUtil.isValidEveningProgramTime(
-                newSchedule.getDayOfWeek(), newSchedule.getStartTime(), newSchedule.getEndTime())) {
-            JOptionPane.showMessageDialog(this,
-                    "Invalid time slot for evening program\n" +
-                            "Evening program runs:\n" +
-                            "Mon-Fri: 18:00-20:00\n" +
-                            "Saturday: 13:00-17:00\n" +
-                            "Sunday: 8:00-12:00",
-                    "Invalid Time Slot",
-                    JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        // Check for schedule conflicts
-        String conflictDetails = ScheduleDAO.getConflictDetails(newSchedule);
-        if (conflictDetails != null) {
-            JOptionPane.showMessageDialog(this,
-                    conflictDetails,
-                    "Schedule Conflict",
-                    JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        // Create resource requirements
+        // Get selected resources
         List<ScheduleResource> resources = new ArrayList<>();
         if (resourcesCheckBox.isSelected()) {
             // Add both projector and connector as a set
@@ -435,17 +377,63 @@ public class ScheduleDialog extends JDialog implements ActionListener {
                 resources.add(new ScheduleResource(0, connectorResource.getResourceId(), 1));
             }
         }
+        schedule.setRequiredResources(resources);
 
-        // Save schedule with resources
-        boolean success = schedule == null ? ScheduleDAO.addScheduleWithResources(newSchedule, resources)
-                : ScheduleDAO.updateScheduleWithResources(newSchedule, resources);
+        // Validate time range
+        if (!TimeSlotUtil.isValidTimeRange(schedule.getStartTime(), schedule.getEndTime())) {
+            JOptionPane.showMessageDialog(this,
+                    "End time must be after start time",
+                    "Invalid Time Range",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Check program time validity
+        boolean isRegularProgram = schedule.getProgramType().equalsIgnoreCase("Regular");
+        if (isRegularProgram && !TimeSlotUtil.isValidRegularProgramTime(
+                schedule.getDayOfWeek(), schedule.getStartTime(), schedule.getEndTime())) {
+            JOptionPane.showMessageDialog(this,
+                    "Invalid time slot for regular program\n" +
+                            "Regular program hours are 8:00-17:00 on weekdays",
+                    "Invalid Time Slot",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        } else if (!isRegularProgram && !TimeSlotUtil.isValidEveningProgramTime(
+                schedule.getDayOfWeek(), schedule.getStartTime(), schedule.getEndTime())) {
+            JOptionPane.showMessageDialog(this,
+                    "Invalid time slot for evening program\n" +
+                            "Evening program hours are:\n" +
+                            "Weekdays: 18:00-20:00\n" +
+                            "Saturday: 13:00-17:00\n" +
+                            "Sunday: 8:00-12:00",
+                    "Invalid Time Slot",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Check for schedule conflicts
+        String conflictDetails = ScheduleDAO.getConflictDetails(schedule);
+        if (conflictDetails != null) {
+            JOptionPane.showMessageDialog(this,
+                    "Schedule conflict detected:\n" + conflictDetails,
+                    "Schedule Conflict",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        boolean success;
+        if (isNewSchedule) {
+            success = ScheduleDAO.addSchedule(schedule);
+        } else {
+            success = ScheduleDAO.updateSchedule(schedule);
+        }
 
         if (success) {
             confirmed = true;
             dispose();
         } else {
             JOptionPane.showMessageDialog(this,
-                    "Failed to save schedule",
+                    "Failed to save schedule. Please check your input and try again.",
                     "Error",
                     JOptionPane.ERROR_MESSAGE);
         }
@@ -462,7 +450,7 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         return null;
     }
 
-    private boolean validateFields() {
+    private boolean validateInput() {
         // Validate course selection
         if (courseCombo.getSelectedItem() == null) {
             JOptionPane.showMessageDialog(this,

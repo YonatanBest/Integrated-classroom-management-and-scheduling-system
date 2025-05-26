@@ -3,9 +3,11 @@ package com.classroom.dao;
 import com.classroom.model.Schedule;
 import com.classroom.util.DatabaseUtil;
 import com.classroom.model.ScheduleResource;
+import com.classroom.util.ScheduleValidationUtil;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import javax.swing.JOptionPane;
 
 /**
  * Data Access Object for Schedule-related database operations.
@@ -16,15 +18,156 @@ public class ScheduleDAO {
      * Add a new schedule.
      */
     public static boolean addSchedule(Schedule schedule) {
-        String sql = "INSERT INTO Schedule (course_id, instructor_id, day_of_week, start_time, end_time, room, program_type) "
-                +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)";
-        Connection conn = null;
+        System.out.println("\nAttempting to add schedule:");
+        System.out.println("Course ID: " + schedule.getCourseId());
+        System.out.println("Instructor ID: " + schedule.getInstructorId());
+        System.out.println("Day: " + schedule.getDayOfWeek());
+        System.out.println("Time: " + schedule.getStartTime() + " - " + schedule.getEndTime());
+        System.out.println("Room: " + schedule.getRoom());
+        System.out.println("Program Type: " + schedule.getProgramType());
 
+        // First validate the schedule
+        try {
+            List<ScheduleResource> resources = schedule.getRequiredResources();
+            if (resources == null) {
+                resources = new ArrayList<>();
+            }
+            System.out.println("Resources: " + resources.size());
+
+            ScheduleValidationUtil.ValidationResult validationResult = ScheduleValidationUtil.validateSchedule(schedule,
+                    resources);
+
+            if (!validationResult.isValid) {
+                System.out.println("Validation failed: " + validationResult.message);
+                JOptionPane.showMessageDialog(null,
+                        validationResult.message,
+                        "Validation Error",
+                        JOptionPane.ERROR_MESSAGE);
+                return false;
+            }
+            System.out.println("Validation passed");
+
+            Connection conn = null;
+            try {
+                conn = DatabaseUtil.getConnection();
+                System.out.println("Database connection established");
+
+                // Insert schedule
+                String sql = "INSERT INTO Schedule (course_id, instructor_id, day_of_week, start_time, end_time, room, program_type) "
+                        +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+                PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+                pstmt.setInt(1, schedule.getCourseId());
+                pstmt.setInt(2, schedule.getInstructorId());
+                pstmt.setString(3, schedule.getDayOfWeek());
+                pstmt.setString(4, schedule.getStartTime());
+                pstmt.setString(5, schedule.getEndTime());
+                pstmt.setString(6, schedule.getRoom());
+                pstmt.setString(7, schedule.getProgramType());
+
+                System.out.println("Executing SQL: " + sql);
+                System.out.println("Parameters: " + schedule.getCourseId() + ", " + schedule.getInstructorId() + ", " +
+                        schedule.getDayOfWeek() + ", " + schedule.getStartTime() + ", " + schedule.getEndTime() + ", " +
+                        schedule.getRoom() + ", " + schedule.getProgramType());
+
+                int affectedRows = pstmt.executeUpdate();
+                System.out.println("Affected rows: " + affectedRows);
+
+                if (affectedRows > 0) {
+                    // Get the generated schedule ID
+                    ResultSet generatedKeys = pstmt.getGeneratedKeys();
+                    if (generatedKeys.next()) {
+                        int scheduleId = generatedKeys.getInt(1);
+                        schedule.setScheduleId(scheduleId);
+                        System.out.println("Generated schedule ID: " + scheduleId);
+
+                        // Add resources if any
+                        if (!resources.isEmpty()) {
+                            String resourceSql = "INSERT INTO ScheduleResources (schedule_id, resource_id, quantity_needed) VALUES (?, ?, ?)";
+                            PreparedStatement resourceStmt = conn.prepareStatement(resourceSql);
+
+                            for (ScheduleResource resource : resources) {
+                                resourceStmt.setInt(1, scheduleId);
+                                resourceStmt.setInt(2, resource.getResourceId());
+                                resourceStmt.setInt(3, resource.getQuantityNeeded());
+                                resourceStmt.executeUpdate();
+                                System.out.println("Added resource: " + resource.getResourceId() + " with quantity "
+                                        + resource.getQuantityNeeded());
+                            }
+                        }
+
+                        conn.commit();
+                        System.out.println("Transaction committed successfully");
+                        return true;
+                    }
+                }
+
+                conn.rollback();
+                System.out.println("Transaction rolled back - no rows affected");
+                return false;
+            } catch (SQLException e) {
+                if (conn != null) {
+                    try {
+                        conn.rollback();
+                        System.out.println("Transaction rolled back due to error");
+                    } catch (SQLException ex) {
+                        ex.printStackTrace();
+                    }
+                }
+                e.printStackTrace();
+                System.out.println("SQL Error: " + e.getMessage());
+                JOptionPane.showMessageDialog(null,
+                        "Error adding schedule: " + e.getMessage(),
+                        "Database Error",
+                        JOptionPane.ERROR_MESSAGE);
+                return false;
+            } finally {
+                if (conn != null) {
+                    try {
+                        conn.close();
+                        System.out.println("Database connection closed");
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("Validation Error: " + e.getMessage());
+            JOptionPane.showMessageDialog(null,
+                    "Error during schedule validation: " + e.getMessage(),
+                    "Validation Error",
+                    JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+    }
+
+    /**
+     * Update an existing schedule.
+     */
+    public static boolean updateSchedule(Schedule schedule) {
+        // First validate the schedule
+        ScheduleValidationUtil.ValidationResult validationResult = ScheduleValidationUtil.validateSchedule(schedule,
+                schedule.getRequiredResources());
+
+        if (!validationResult.isValid) {
+            JOptionPane.showMessageDialog(null,
+                    validationResult.message,
+                    "Validation Error",
+                    JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+
+        Connection conn = null;
         try {
             conn = DatabaseUtil.getConnection();
-            PreparedStatement pstmt = conn.prepareStatement(sql);
 
+            // Update the schedule
+            String sql = "UPDATE Schedule SET course_id = ?, instructor_id = ?, day_of_week = ?, " +
+                    "start_time = ?, end_time = ?, room = ?, program_type = ? WHERE schedule_id = ?";
+
+            PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, schedule.getCourseId());
             pstmt.setInt(2, schedule.getInstructorId());
             pstmt.setString(3, schedule.getDayOfWeek());
@@ -32,15 +175,36 @@ public class ScheduleDAO {
             pstmt.setString(5, schedule.getEndTime());
             pstmt.setString(6, schedule.getRoom());
             pstmt.setString(7, schedule.getProgramType());
+            pstmt.setInt(8, schedule.getScheduleId());
 
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows > 0) {
+                // Update resources
+                // First delete existing resources
+                String deleteResourcesSql = "DELETE FROM ScheduleResources WHERE schedule_id = ?";
+                PreparedStatement deleteStmt = conn.prepareStatement(deleteResourcesSql);
+                deleteStmt.setInt(1, schedule.getScheduleId());
+                deleteStmt.executeUpdate();
+
+                // Then add new resources
+                if (schedule.getRequiredResources() != null && !schedule.getRequiredResources().isEmpty()) {
+                    String resourceSql = "INSERT INTO ScheduleResources (schedule_id, resource_id, quantity_needed) VALUES (?, ?, ?)";
+                    PreparedStatement resourceStmt = conn.prepareStatement(resourceSql);
+
+                    for (ScheduleResource resource : schedule.getRequiredResources()) {
+                        resourceStmt.setInt(1, schedule.getScheduleId());
+                        resourceStmt.setInt(2, resource.getResourceId());
+                        resourceStmt.setInt(3, resource.getQuantityNeeded());
+                        resourceStmt.executeUpdate();
+                    }
+                }
+
                 conn.commit();
                 return true;
             }
+
             conn.rollback();
             return false;
-
         } catch (SQLException e) {
             try {
                 if (conn != null) {
@@ -63,90 +227,50 @@ public class ScheduleDAO {
     }
 
     /**
-     * Update an existing schedule.
+     * Delete a schedule.
      */
-    public static boolean updateScheduleWithResources(Schedule schedule, List<ScheduleResource> resources) {
+    public static boolean deleteSchedule(int scheduleId) {
         Connection conn = null;
         try {
             conn = DatabaseUtil.getConnection();
-            conn.setAutoCommit(false);
 
-            // First update the schedule
-            String scheduleSql = "UPDATE Schedule SET course_id = ?, instructor_id = ?, day_of_week = ?, " +
-                    "start_time = ?, end_time = ?, room = ?, program_type = ? WHERE schedule_id = ?";
+            // First delete associated resources
+            String deleteResourcesSql = "DELETE FROM ScheduleResources WHERE schedule_id = ?";
+            PreparedStatement resourceStmt = conn.prepareStatement(deleteResourcesSql);
+            resourceStmt.setInt(1, scheduleId);
+            resourceStmt.executeUpdate();
 
-            try (PreparedStatement pstmt = conn.prepareStatement(scheduleSql)) {
-                pstmt.setInt(1, schedule.getCourseId());
-                pstmt.setInt(2, schedule.getInstructorId());
-                pstmt.setString(3, schedule.getDayOfWeek());
-                pstmt.setString(4, schedule.getStartTime());
-                pstmt.setString(5, schedule.getEndTime());
-                pstmt.setString(6, schedule.getRoom());
-                pstmt.setString(7, schedule.getProgramType());
-                pstmt.setInt(8, schedule.getScheduleId());
+            // Then delete the schedule
+            String deleteScheduleSql = "DELETE FROM Schedule WHERE schedule_id = ?";
+            PreparedStatement scheduleStmt = conn.prepareStatement(deleteScheduleSql);
+            scheduleStmt.setInt(1, scheduleId);
 
-                pstmt.executeUpdate();
-
-                // Delete existing resources
-                String deleteResourcesSql = "DELETE FROM ScheduleResources WHERE schedule_id = ?";
-                try (PreparedStatement deleteStmt = conn.prepareStatement(deleteResourcesSql)) {
-                    deleteStmt.setInt(1, schedule.getScheduleId());
-                    deleteStmt.executeUpdate();
-                }
-
-                // Insert new resources
-                String resourceSql = "INSERT INTO ScheduleResources (schedule_id, resource_id, quantity_needed) VALUES (?, ?, ?)";
-                try (PreparedStatement resourceStmt = conn.prepareStatement(resourceSql)) {
-                    for (ScheduleResource resource : resources) {
-                        resourceStmt.setInt(1, schedule.getScheduleId());
-                        resourceStmt.setInt(2, resource.getResourceId());
-                        resourceStmt.setInt(3, resource.getQuantityNeeded());
-                        resourceStmt.executeUpdate();
-                    }
-                }
-
+            int affectedRows = scheduleStmt.executeUpdate();
+            if (affectedRows > 0) {
                 conn.commit();
                 return true;
             }
+
+            conn.rollback();
+            return false;
         } catch (SQLException e) {
-            if (conn != null) {
-                try {
+            try {
+                if (conn != null) {
                     conn.rollback();
-                } catch (SQLException ex) {
-                    ex.printStackTrace();
                 }
+            } catch (SQLException ex) {
+                ex.printStackTrace();
             }
             e.printStackTrace();
             return false;
         } finally {
-            if (conn != null) {
-                try {
-                    conn.setAutoCommit(true);
+            try {
+                if (conn != null && !conn.isClosed()) {
                     conn.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
                 }
+            } catch (SQLException e) {
+                e.printStackTrace();
             }
-        }
-    }
-
-    /**
-     * Delete a schedule.
-     */
-    public static boolean deleteSchedule(int scheduleId) {
-        String sql = "DELETE FROM Schedule WHERE schedule_id = ?";
-
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            pstmt.setInt(1, scheduleId);
-
-            int affectedRows = pstmt.executeUpdate();
-            return affectedRows > 0;
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
         }
     }
 
@@ -498,6 +622,76 @@ public class ScheduleDAO {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        return schedules;
+    }
+
+    /**
+     * Get schedule details for a specific room for debugging
+     */
+    public static void debugRoomSchedule(String room) {
+        String sql = "SELECT s.*, c.course_name, c.course_code " +
+                "FROM Schedule s " +
+                "JOIN Courses c ON s.course_id = c.course_id " +
+                "WHERE s.room = ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, room);
+            System.out.println("\nSchedule details for room: " + room);
+            System.out.println("----------------------------------------");
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    System.out.println(String.format(
+                            "Course: %s - %s\n" +
+                                    "Day: %s, Time: %s - %s\n" +
+                                    "Program Type: %s\n" +
+                                    "----------------------------------------",
+                            rs.getString("course_code"),
+                            rs.getString("course_name"),
+                            rs.getString("day_of_week"),
+                            rs.getString("start_time"),
+                            rs.getString("end_time"),
+                            rs.getString("program_type")));
+                }
+            }
+            conn.commit();
+        } catch (SQLException e) {
+            System.err.println("Error checking room schedule: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Get all schedules for a specific course.
+     */
+    public static List<Schedule> getSchedulesByCourseId(int courseId) {
+        List<Schedule> schedules = new ArrayList<>();
+        String sql = "SELECT s.*, c.course_name, c.course_code, u.full_name as instructor_name " +
+                "FROM Schedule s " +
+                "JOIN Courses c ON s.course_id = c.course_id " +
+                "JOIN Users u ON s.instructor_id = u.user_id " +
+                "WHERE s.course_id = ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, courseId);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Schedule schedule = extractScheduleFromResultSet(rs);
+                    schedule.setCourseName(rs.getString("course_name"));
+                    schedule.setCourseCode(rs.getString("course_code"));
+                    schedule.setInstructorName(rs.getString("instructor_name"));
+                    schedules.add(schedule);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
         return schedules;
     }
 }

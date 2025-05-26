@@ -4,6 +4,7 @@ package com.classroom.ui;
 import com.classroom.model.User;
 import com.classroom.model.Course;
 import com.classroom.dao.CourseDAO;
+import com.classroom.dao.ScheduleDAO;
 import com.classroom.util.DatabaseUtil;
 
 import java.sql.Connection;
@@ -95,6 +96,11 @@ public class StudentDashboard extends JFrame {
         userLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         userLabel.setForeground(Color.WHITE);
 
+        // Add refresh button
+        JButton refreshButton = new JButton("Refresh");
+        UIUtils.styleButton(refreshButton, ColorScheme.SECONDARY);
+        refreshButton.addActionListener(e -> refreshAll());
+
         JButton logoutButton = new JButton("Logout");
         UIUtils.styleButton(logoutButton, Color.WHITE);
         logoutButton.setForeground(ColorScheme.PRIMARY);
@@ -103,6 +109,8 @@ public class StudentDashboard extends JFrame {
         userInfoPanel.add(roomLabel);
         userInfoPanel.add(Box.createHorizontalStrut(20));
         userInfoPanel.add(userLabel);
+        userInfoPanel.add(Box.createHorizontalStrut(10));
+        userInfoPanel.add(refreshButton);
         userInfoPanel.add(Box.createHorizontalStrut(10));
         userInfoPanel.add(logoutButton);
 
@@ -167,38 +175,130 @@ public class StudentDashboard extends JFrame {
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
         contentPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        List<Course> allCourses = CourseDAO.getAllCourses();
-        for (Course course : allCourses) {
-            if (!EnrollmentDAO.isStudentEnrolled(currentUser.getUserId(), course.getCourseId())) {
-                JPanel coursePanel = new JPanel(new BorderLayout());
-                coursePanel.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(ColorScheme.LIGHT_ACCENT),
-                        BorderFactory.createEmptyBorder(10, 10, 10, 10)));
+        // Get student's assigned room
+        String assignedRoom = currentUser.getAssignedRoom();
+        String programType = currentUser.getProgramType();
 
-                JPanel infoPanel = new JPanel(new GridLayout(2, 1));
-                infoPanel.add(new JLabel(course.getCourseCode() + " - " + course.getCourseName()));
-                infoPanel.add(new JLabel(course.getDescription()));
+        System.out.println("\nStudent Info:");
+        System.out.println("- Assigned Room: " + assignedRoom);
+        System.out.println("- Program Type: " + programType);
 
-                JButton enrollButton = new JButton("Enroll");
-                UIUtils.styleButton(enrollButton, ColorScheme.PRIMARY);
-                enrollButton.addActionListener(e -> {
-                    if (EnrollmentDAO.enrollStudent(currentUser.getUserId(), course.getCourseId())) {
-                        JOptionPane.showMessageDialog(dialog,
-                                "Successfully enrolled in " + course.getCourseName(),
-                                "Success", JOptionPane.INFORMATION_MESSAGE);
-                        dialog.dispose();
-                        refreshCoursesPanel();
-                    } else {
-                        JOptionPane.showMessageDialog(dialog,
-                                "Failed to enroll in the course",
-                                "Error", JOptionPane.ERROR_MESSAGE);
-                    }
-                });
+        if (assignedRoom == null || assignedRoom.trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "You need to be assigned to a room before you can enroll in courses.\nPlease contact your coordinator.",
+                    "No Room Assigned",
+                    JOptionPane.WARNING_MESSAGE);
+            dialog.dispose();
+            return;
+        }
 
-                coursePanel.add(infoPanel, BorderLayout.CENTER);
-                coursePanel.add(enrollButton, BorderLayout.EAST);
-                contentPanel.add(coursePanel);
-                contentPanel.add(Box.createVerticalStrut(10));
+        // Debug: Print schedule details for the room
+        ScheduleDAO.debugRoomSchedule(assignedRoom);
+
+        // Ensure program type is properly capitalized
+        if (programType != null) {
+            programType = programType.substring(0, 1).toUpperCase() + programType.substring(1).toLowerCase();
+        }
+
+        // Get courses available in the student's assigned room and program type
+        List<Course> availableCourses = CourseDAO.getCoursesByRoomAndProgramType(assignedRoom, programType);
+
+        System.out.println("Found " + availableCourses.size() + " available courses");
+
+        if (availableCourses.isEmpty()) {
+            String message = String.format("No courses are currently available in room %s for %s program.",
+                    assignedRoom, programType);
+            JLabel noCoursesLabel = new JLabel(message);
+            noCoursesLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            contentPanel.add(noCoursesLabel);
+
+            // Add a debug panel
+            JPanel debugPanel = new JPanel();
+            debugPanel.setLayout(new BoxLayout(debugPanel, BoxLayout.Y_AXIS));
+            debugPanel.setBorder(BorderFactory.createTitledBorder("Debug Information"));
+            debugPanel.add(new JLabel("Room: " + assignedRoom));
+            debugPanel.add(new JLabel("Program Type: " + programType));
+            debugPanel.add(new JLabel("Student ID: " + currentUser.getUserId()));
+
+            // Add a refresh button
+            JButton refreshButton = new JButton("Refresh Available Courses");
+            UIUtils.styleButton(refreshButton, ColorScheme.PRIMARY);
+            refreshButton.addActionListener(e -> {
+                dialog.dispose();
+                showEnrollmentDialog();
+            });
+            debugPanel.add(Box.createVerticalStrut(10));
+            debugPanel.add(refreshButton);
+
+            contentPanel.add(Box.createVerticalStrut(20));
+            contentPanel.add(debugPanel);
+        } else {
+            for (Course course : availableCourses) {
+                if (!EnrollmentDAO.isStudentEnrolled(currentUser.getUserId(), course.getCourseId())) {
+                    JPanel coursePanel = new JPanel(new BorderLayout());
+                    coursePanel.setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(ColorScheme.SECONDARY),
+                            BorderFactory.createEmptyBorder(10, 10, 10, 10)));
+                    coursePanel.setBackground(Color.WHITE);
+
+                    JPanel infoPanel = new JPanel(new GridLayout(3, 1, 5, 5));
+                    infoPanel.setBackground(Color.WHITE);
+
+                    JLabel nameLabel = new JLabel(course.getCourseCode() + " - " + course.getCourseName());
+                    nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+
+                    JLabel creditsLabel = new JLabel("Credits: " + course.getCreditHours());
+                    JLabel descLabel = new JLabel(course.getDescription());
+
+                    infoPanel.add(nameLabel);
+                    infoPanel.add(creditsLabel);
+                    infoPanel.add(descLabel);
+
+                    JButton enrollButton = new JButton("Enroll");
+                    UIUtils.styleButton(enrollButton, ColorScheme.PRIMARY);
+                    enrollButton.addActionListener(e -> {
+                        int result = EnrollmentDAO.enrollStudent(currentUser.getUserId(), course.getCourseId());
+                        switch (result) {
+                            case 1:
+                                JOptionPane.showMessageDialog(dialog,
+                                        "Successfully enrolled in " + course.getCourseName(),
+                                        "Success",
+                                        JOptionPane.INFORMATION_MESSAGE);
+                                dialog.dispose();
+                                refreshCoursesPanel();
+                                calendarPanel.refreshCalendar();
+                                break;
+                            case 0:
+                                JOptionPane.showMessageDialog(dialog,
+                                        "You are already enrolled in this course",
+                                        "Already Enrolled",
+                                        JOptionPane.INFORMATION_MESSAGE);
+                                break;
+                            case -1:
+                                JOptionPane.showMessageDialog(dialog,
+                                        "You need to be assigned to a room before enrolling in courses.\nPlease contact your coordinator.",
+                                        "No Room Assigned",
+                                        JOptionPane.WARNING_MESSAGE);
+                                break;
+                            case -2:
+                                JOptionPane.showMessageDialog(dialog,
+                                        "This course is not available in your assigned room or program type",
+                                        "Course Not Available",
+                                        JOptionPane.WARNING_MESSAGE);
+                                break;
+                            default:
+                                JOptionPane.showMessageDialog(dialog,
+                                        "Failed to enroll in the course. Please try again later.",
+                                        "Error",
+                                        JOptionPane.ERROR_MESSAGE);
+                        }
+                    });
+
+                    coursePanel.add(infoPanel, BorderLayout.CENTER);
+                    coursePanel.add(enrollButton, BorderLayout.EAST);
+                    contentPanel.add(coursePanel);
+                    contentPanel.add(Box.createVerticalStrut(10));
+                }
             }
         }
 
@@ -208,55 +308,130 @@ public class StudentDashboard extends JFrame {
     }
 
     private void refreshCoursesPanel() {
-        List<Course> availableCourses = new ArrayList<>();
-
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement("SELECT assigned_room FROM Users WHERE user_id = ?")) {
-            stmt.setInt(1, currentUser.getUserId());
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                String assignedRoom = rs.getString("assigned_room");
-                if (assignedRoom != null) {
-                    availableCourses = CourseDAO.getCoursesByRoom(assignedRoom);
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
+        // Remove all existing components
         coursesPanel.removeAll();
-        for (Course course : availableCourses) {
-            coursesPanel.add(createCourseCard(course));
+
+        // Create header panel with title and enroll button
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBackground(Color.WHITE);
+
+        JLabel titleLabel = new JLabel("My Courses");
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        titleLabel.setForeground(ColorScheme.PRIMARY);
+
+        JButton enrollButton = new JButton("Enroll in Courses");
+        UIUtils.styleButton(enrollButton, ColorScheme.PRIMARY);
+        enrollButton.addActionListener(e -> showEnrollmentDialog());
+
+        headerPanel.add(titleLabel, BorderLayout.WEST);
+        headerPanel.add(enrollButton, BorderLayout.EAST);
+
+        // Create courses list panel
+        JPanel coursesListPanel = new JPanel();
+        coursesListPanel.setLayout(new BoxLayout(coursesListPanel, BoxLayout.Y_AXIS));
+        coursesListPanel.setBackground(Color.WHITE);
+        coursesListPanel.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
+
+        // Get enrolled courses
+        List<Course> enrolledCourses = CourseDAO.getCoursesByStudentId(currentUser.getUserId());
+
+        if (enrolledCourses.isEmpty()) {
+            JLabel noCoursesLabel = new JLabel("You are not enrolled in any courses yet.");
+            noCoursesLabel.setFont(new Font("Segoe UI", Font.ITALIC, 14));
+            noCoursesLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            coursesListPanel.add(noCoursesLabel);
+        } else {
+            for (Course course : enrolledCourses) {
+                JPanel courseCard = createCourseCard(course);
+                coursesListPanel.add(courseCard);
+                coursesListPanel.add(Box.createVerticalStrut(10));
+            }
         }
+
+        // Add components to the main panel
+        coursesPanel.setLayout(new BorderLayout());
+        coursesPanel.add(headerPanel, BorderLayout.NORTH);
+        coursesPanel.add(new JScrollPane(coursesListPanel), BorderLayout.CENTER);
+
+        // Refresh the panel
         coursesPanel.revalidate();
         coursesPanel.repaint();
     }
 
     private JPanel createCourseCard(Course course) {
-        JPanel card = new JPanel(new BorderLayout());
-        card.setBackground(Color.WHITE);
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(ColorScheme.LIGHT_ACCENT, 1),
-                BorderFactory.createEmptyBorder(15, 15, 15, 15)));
-
-        JLabel codeLabel = new JLabel(course.getCourseCode());
-        codeLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        codeLabel.setForeground(ColorScheme.PRIMARY);
+                BorderFactory.createLineBorder(ColorScheme.SECONDARY, 1),
+                BorderFactory.createEmptyBorder(10, 10, 10, 10)));
+        card.setBackground(Color.WHITE);
 
         JLabel nameLabel = new JLabel(course.getCourseName());
-        nameLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
+        nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel descLabel = new JLabel(course.getDescription());
-        descLabel.setFont(new Font("Segoe UI", Font.ITALIC, 14));
-        descLabel.setForeground(Color.DARK_GRAY);
+        JLabel codeLabel = new JLabel("Code: " + course.getCourseCode());
+        codeLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel infoPanel = new JPanel(new GridLayout(3, 1, 5, 5));
-        infoPanel.setOpaque(false);
-        infoPanel.add(codeLabel);
-        infoPanel.add(nameLabel);
-        infoPanel.add(descLabel);
+        JLabel creditsLabel = new JLabel("Credits: " + course.getCreditHours());
+        creditsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        card.add(infoPanel, BorderLayout.CENTER);
+        JButton enrollButton = new JButton("Enroll");
+        UIUtils.styleButton(enrollButton, ColorScheme.PRIMARY);
+        enrollButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Check if student is already enrolled
+        boolean isEnrolled = EnrollmentDAO.isStudentEnrolled(currentUser.getUserId(), course.getCourseId());
+        if (isEnrolled) {
+            enrollButton.setText("Enrolled");
+            enrollButton.setEnabled(false);
+        } else {
+            enrollButton.addActionListener(e -> {
+                int result = EnrollmentDAO.enrollStudent(currentUser.getUserId(), course.getCourseId());
+                switch (result) {
+                    case 1:
+                        JOptionPane.showMessageDialog(this,
+                                "Successfully enrolled in " + course.getCourseName(),
+                                "Success",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        enrollButton.setText("Enrolled");
+                        enrollButton.setEnabled(false);
+                        calendarPanel.refreshCalendar();
+                        break;
+                    case 0:
+                        JOptionPane.showMessageDialog(this,
+                                "You are already enrolled in this course",
+                                "Already Enrolled",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        break;
+                    case -1:
+                        JOptionPane.showMessageDialog(this,
+                                "You need to be assigned to a room before enrolling in courses.\nPlease contact your coordinator.",
+                                "No Room Assigned",
+                                JOptionPane.WARNING_MESSAGE);
+                        break;
+                    case -2:
+                        JOptionPane.showMessageDialog(this,
+                                "This course is not available in your assigned room or program type",
+                                "Course Not Available",
+                                JOptionPane.WARNING_MESSAGE);
+                        break;
+                    default:
+                        JOptionPane.showMessageDialog(this,
+                                "Failed to enroll in the course. Please try again later.",
+                                "Error",
+                                JOptionPane.ERROR_MESSAGE);
+                }
+            });
+        }
+
+        card.add(nameLabel);
+        card.add(Box.createVerticalStrut(5));
+        card.add(codeLabel);
+        card.add(Box.createVerticalStrut(5));
+        card.add(creditsLabel);
+        card.add(Box.createVerticalStrut(10));
+        card.add(enrollButton);
 
         return card;
     }
@@ -427,6 +602,37 @@ public class StudentDashboard extends JFrame {
         String assignedRoom = currentUser.getAssignedRoom();
         roomLabel.setText(
                 assignedRoom != null && !assignedRoom.isEmpty() ? "Room: " + assignedRoom : "No Room Assigned");
+    }
+
+    // Add this method to refresh all components
+    public void refreshAll() {
+        // Refresh user data from database
+        try (Connection conn = DatabaseUtil.getConnection()) {
+            String sql = "SELECT * FROM Users WHERE user_id = ?";
+            PreparedStatement pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, currentUser.getUserId());
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                currentUser.setAssignedRoom(rs.getString("assigned_room"));
+                currentUser.setProgramType(rs.getString("program_type"));
+            }
+            conn.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        // Update room label
+        updateRoomLabel();
+
+        // Refresh calendar
+        calendarPanel.refreshCalendar();
+
+        // Refresh courses panel
+        refreshCoursesPanel();
+
+        // Refresh the entire frame
+        revalidate();
+        repaint();
     }
 
     // Add this method to refresh the dashboard
