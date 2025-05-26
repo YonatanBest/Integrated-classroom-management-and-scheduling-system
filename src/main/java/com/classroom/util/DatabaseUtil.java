@@ -77,10 +77,29 @@ public class DatabaseUtil {
                         end_time TEXT NOT NULL,
                         room TEXT NOT NULL,
                         program_type TEXT NOT NULL,
+                        status TEXT DEFAULT 'draft' NOT NULL,
+                        publish_date DATE,
                         FOREIGN KEY (course_id) REFERENCES Courses(course_id),
                         FOREIGN KEY (instructor_id) REFERENCES Users(user_id),
                         CHECK (start_time < end_time),
-                        CHECK (program_type IN ('Regular', 'Evening'))
+                        CHECK (program_type IN ('Regular', 'Evening')),
+                        CHECK (status IN ('draft', 'published', 'revision_requested'))
+                    )
+                """;
+
+        String createRevisionRequestsTable = """
+                    CREATE TABLE IF NOT EXISTS ScheduleRevisionRequests (
+                        request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        schedule_id INTEGER NOT NULL,
+                        instructor_id INTEGER NOT NULL,
+                        request_reason TEXT NOT NULL,
+                        requested_changes TEXT NOT NULL,
+                        status TEXT DEFAULT 'pending' NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (schedule_id) REFERENCES Schedule(schedule_id),
+                        FOREIGN KEY (instructor_id) REFERENCES Users(user_id),
+                        CHECK (status IN ('pending', 'approved', 'rejected'))
                     )
                 """;
 
@@ -155,6 +174,7 @@ public class DatabaseUtil {
             stmt.execute(createUsersTable);
             stmt.execute(createCoursesTable);
             stmt.execute(createScheduleTable);
+            stmt.execute(createRevisionRequestsTable);
             stmt.execute(createEnrollmentsTable);
             stmt.execute(createResourcesTable);
             stmt.execute(createScheduleResourcesTable);

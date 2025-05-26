@@ -7,6 +7,7 @@ import com.classroom.util.ColorScheme;
 import com.classroom.util.UIUtils;
 import com.classroom.ui.components.CalendarPanel;
 import com.classroom.ui.components.MakeupApprovalPanel;
+import com.classroom.ui.components.DraftSchedulePanel;
 
 public class InstructorDashboard extends JFrame {
     private User currentUser;
@@ -43,6 +44,8 @@ public class InstructorDashboard extends JFrame {
 
         tabbedPane.addTab("My Schedule", new ImageIcon(), new JScrollPane(calendarPanel),
                 "View your teaching schedule");
+        tabbedPane.addTab("Draft Schedule", new ImageIcon(), new DraftSchedulePanel(currentUser),
+                "View and request revisions for draft schedules");
         tabbedPane.addTab("Makeup Requests", new ImageIcon(), new MakeupApprovalPanel(currentUser),
                 "Manage makeup class requests");
         tabbedPane.addTab("Profile", new ImageIcon(), profilePanel, "View and edit your profile");

@@ -15,6 +15,8 @@ public class Schedule {
     private String endTime;
     private String room;
     private String programType; // "regular" or "evening"
+    private String status; // "draft", "published", "revision_requested"
+    private String publishDate;
 
     // Additional fields for display purposes (not in database)
     private String courseName;
@@ -35,12 +37,14 @@ public class Schedule {
         this.endTime = endTime;
         this.room = room;
         this.programType = programType;
+        this.status = "draft";
         this.requiredResources = new ArrayList<>();
     }
 
     // Default constructor
     public Schedule() {
         this.requiredResources = new ArrayList<>();
+        this.status = "draft";
     }
 
     // Getters and Setters
@@ -130,6 +134,34 @@ public class Schedule {
 
     public void setInstructorName(String instructorName) {
         this.instructorName = instructorName;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getPublishDate() {
+        return publishDate;
+    }
+
+    public void setPublishDate(String publishDate) {
+        this.publishDate = publishDate;
+    }
+
+    public boolean isDraft() {
+        return "draft".equals(status);
+    }
+
+    public boolean isPublished() {
+        return "published".equals(status);
+    }
+
+    public boolean isRevisionRequested() {
+        return "revision_requested".equals(status);
     }
 
     @Override

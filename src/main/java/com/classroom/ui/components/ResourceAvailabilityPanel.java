@@ -1,13 +1,11 @@
 package com.classroom.ui.components;
 
 import com.classroom.dao.ResourceDAO;
-import com.classroom.model.Resource;
 import com.classroom.util.ColorScheme;
 import com.classroom.util.UIUtils;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.List;
 
 public class ResourceAvailabilityPanel extends JPanel {
     private JLabel projectorLabel;
