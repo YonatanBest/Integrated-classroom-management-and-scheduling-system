@@ -35,8 +35,8 @@ A comprehensive Java-based system for managing classroom schedules, resources, a
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/YonatanBest/Integrated-classroom-management-scheduling-system.git
-cd Integrated-classroom-management-scheduling-system
+git clone https://github.com/YonatanBest/Integrated-classroom-management-and-scheduling-system.git
+cd Integrated-classroom-management-and-scheduling-system
 ```
 
 2. Build the project using Maven:
