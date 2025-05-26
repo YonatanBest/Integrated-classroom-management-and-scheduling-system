@@ -97,8 +97,6 @@ public class MakeupApprovalPanel extends JPanel {
         List<MakeupRequest> requests = MakeupRequestDAO.getRequestsByInstructor(currentUser.getUserId());
 
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MMM dd, yyyy");
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
-
         for (MakeupRequest request : requests) {
             tableModel.addRow(new Object[] {
                     request.getCourseCode() + " - " + request.getCourseName(),

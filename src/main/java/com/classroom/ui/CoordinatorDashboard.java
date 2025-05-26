@@ -8,6 +8,7 @@ import com.classroom.model.Schedule;
 import com.classroom.model.User;
 import com.classroom.ui.components.CalendarPanel;
 import com.classroom.ui.components.RepresentativeManagementPanel;
+import com.classroom.ui.components.ResourceAvailabilityPanel;
 import com.classroom.util.ColorScheme;
 import com.classroom.util.UIUtils;
 
@@ -135,9 +136,19 @@ public class CoordinatorDashboard extends JFrame implements ActionListener {
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
+        // Create header panel with title and resource availability
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBackground(Color.WHITE);
+
         JLabel titleLabel = new JLabel("Schedule Management");
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
         titleLabel.setForeground(ColorScheme.PRIMARY);
+
+        // Add resource availability panel
+        ResourceAvailabilityPanel resourcePanel = new ResourceAvailabilityPanel();
+
+        headerPanel.add(titleLabel, BorderLayout.NORTH);
+        headerPanel.add(resourcePanel, BorderLayout.CENTER);
 
         // Create table model
         schedulesTableModel = new DefaultTableModel() {
@@ -187,7 +198,7 @@ public class CoordinatorDashboard extends JFrame implements ActionListener {
         buttonsPanel.add(editScheduleButton);
         buttonsPanel.add(deleteScheduleButton);
 
-        panel.add(titleLabel, BorderLayout.NORTH);
+        panel.add(headerPanel, BorderLayout.NORTH);
         panel.add(new JScrollPane(schedulesTable), BorderLayout.CENTER);
         panel.add(buttonsPanel, BorderLayout.SOUTH);
 

@@ -333,29 +333,6 @@ public class ScheduleDialog extends JDialog implements ActionListener {
         }
     }
 
-    private boolean checkResourceAvailability(String day, String startTime, String endTime) {
-        // Get total resources available (10 sets of projector+connector)
-        int totalResources = 10;
-
-        // Get all schedules for the given day and time range
-        List<Schedule> conflictingSchedules = ScheduleDAO.getSchedulesInTimeRange(day, startTime, endTime);
-        int resourcesInUse = 0;
-
-        for (Schedule s : conflictingSchedules) {
-            // Skip current schedule if editing
-            if (schedule != null && s.getScheduleId() == schedule.getScheduleId()) {
-                continue;
-            }
-            // Check if this schedule uses resources
-            List<ScheduleResource> scheduleResources = ScheduleDAO.getScheduleResources(s.getScheduleId());
-            if (!scheduleResources.isEmpty()) {
-                resourcesInUse++;
-            }
-        }
-
-        return resourcesInUse < totalResources;
-    }
-
     private void saveSchedule() {
         // Validate input
         if (!validateInput()) {

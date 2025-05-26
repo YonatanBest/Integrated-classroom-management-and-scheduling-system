@@ -1,9 +1,7 @@
 package com.classroom.ui;
 
-import com.classroom.dao.CourseDAO;
 import com.classroom.dao.MakeupRequestDAO;
 import com.classroom.dao.ScheduleDAO;
-import com.classroom.model.Course;
 import com.classroom.model.MakeupRequest;
 import com.classroom.model.Schedule;
 import com.classroom.model.User;

@@ -1,9 +1,7 @@
 package com.classroom.ui.components;
 
-import com.classroom.dao.CourseDAO;
 import com.classroom.dao.MakeupRequestDAO;
 import com.classroom.dao.ScheduleDAO;
-import com.classroom.model.Course;
 import com.classroom.model.MakeupRequest;
 import com.classroom.model.Schedule;
 import com.classroom.model.User;
@@ -90,7 +88,6 @@ public class MakeupRequestPanel extends JPanel {
         List<MakeupRequest> requests = MakeupRequestDAO.getRequestsByRep(currentUser.getUserId());
 
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MMM dd, yyyy");
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
 
         for (MakeupRequest request : requests) {
             tableModel.addRow(new Object[] {

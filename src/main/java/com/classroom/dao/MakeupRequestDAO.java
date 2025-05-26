@@ -4,8 +4,6 @@ import com.classroom.model.MakeupRequest;
 import com.classroom.model.Notification;
 import com.classroom.util.DatabaseUtil;
 import java.sql.*;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,7 +34,6 @@ public class MakeupRequestDAO {
                 // Get the generated request ID
                 ResultSet rs = pstmt.getGeneratedKeys();
                 if (rs.next()) {
-                    int requestId = rs.getInt(1);
 
                     // Create notification for instructor
                     String notificationMessage = String.format(

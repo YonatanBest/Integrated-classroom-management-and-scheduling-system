@@ -1,6 +1,5 @@
 package com.classroom.ui;
 
-// Add these imports at the top of the file
 import com.classroom.model.User;
 import com.classroom.model.Course;
 import com.classroom.dao.CourseDAO;
@@ -13,7 +12,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 
 import com.classroom.dao.EnrollmentDAO;
