@@ -11,6 +11,7 @@ public class DatabaseUtil {
             conn = getConnection();
             createTables(conn);
             insertDefaultAdmin(conn);
+            initializeDefaultResources(conn);
             conn.commit(); // Commit the changes
             conn.close();
         } catch (SQLException e) {
@@ -140,6 +141,37 @@ public class DatabaseUtil {
             if (rs.next() && rs.getInt(1) == 0) {
                 stmt.execute(insertAdmin);
             }
+        }
+    }
+
+    private static void initializeDefaultResources(Connection conn) throws SQLException {
+        // First check if resources already exist
+        String checkResources = "SELECT COUNT(*) FROM Resources";
+        try (Statement stmt = conn.createStatement()) {
+            ResultSet rs = stmt.executeQuery(checkResources);
+            if (rs.next() && rs.getInt(1) > 0) {
+                return; // Resources already initialized
+            }
+        }
+
+        // Create a pool of 50 projectors and 50 connectors
+        String insertResource = """
+                    INSERT INTO Resources (room, resource_type, quantity, status)
+                    VALUES (?, ?, ?, 'Available')
+                """;
+
+        try (PreparedStatement pstmt = conn.prepareStatement(insertResource)) {
+            // Add projectors to the pool
+            pstmt.setString(1, "POOL"); // Use "POOL" to indicate these are shared resources
+            pstmt.setString(2, "Projector");
+            pstmt.setInt(3, 50);
+            pstmt.executeUpdate();
+
+            // Add connectors to the pool
+            pstmt.setString(1, "POOL");
+            pstmt.setString(2, "Connector");
+            pstmt.setInt(3, 50);
+            pstmt.executeUpdate();
         }
     }
 }

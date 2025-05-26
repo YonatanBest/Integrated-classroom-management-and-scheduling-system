@@ -2,6 +2,7 @@ package com.classroom.util;
 
 import com.classroom.dao.CourseDAO;
 import com.classroom.dao.ScheduleDAO;
+import com.classroom.dao.ResourceDAO;
 import com.classroom.model.Course;
 import com.classroom.model.Schedule;
 import com.classroom.model.ScheduleResource;
@@ -136,32 +137,52 @@ public class ScheduleValidationUtil {
         }
 
         try (Connection conn = DatabaseUtil.getConnection()) {
+            // For each resource type (projector/connector), check total availability
             for (ScheduleResource resource : requiredResources) {
-                String sql = "SELECT r.quantity - COALESCE((" +
-                        "SELECT SUM(sr.quantity_needed) FROM ScheduleResources sr " +
-                        "JOIN Schedule s ON sr.schedule_id = s.schedule_id " +
-                        "WHERE sr.resource_id = ? AND s.day_of_week = ? " +
-                        "AND s.schedule_id != ? " +
-                        "AND ((? BETWEEN s.start_time AND s.end_time) OR " +
-                        "(? BETWEEN s.start_time AND s.end_time))" +
-                        "), 0) as available_quantity " +
-                        "FROM Resources r WHERE r.resource_id = ?";
+                // Get all schedules that overlap with the requested time slot
+                String sql = """
+                            SELECT COUNT(*) as resources_in_use
+                            FROM Schedule s
+                            JOIN ScheduleResources sr ON s.schedule_id = sr.schedule_id
+                            WHERE s.day_of_week = ?
+                            AND s.schedule_id != ?
+                            AND ((? BETWEEN s.start_time AND s.end_time)
+                            OR (? BETWEEN s.start_time AND s.end_time)
+                            OR (s.start_time BETWEEN ? AND ?)
+                            OR (s.end_time BETWEEN ? AND ?))
+                            AND sr.resource_id IN (
+                                SELECT resource_id FROM Resources
+                                WHERE resource_type = (
+                                    SELECT resource_type FROM Resources WHERE resource_id = ?
+                                )
+                            )
+                        """;
 
                 PreparedStatement pstmt = conn.prepareStatement(sql);
-                pstmt.setInt(1, resource.getResourceId());
-                pstmt.setString(2, schedule.getDayOfWeek());
-                pstmt.setInt(3, schedule.getScheduleId());
-                pstmt.setString(4, schedule.getStartTime());
-                pstmt.setString(5, schedule.getEndTime());
-                pstmt.setInt(6, resource.getResourceId());
+                pstmt.setString(1, schedule.getDayOfWeek());
+                pstmt.setInt(2, schedule.getScheduleId());
+                pstmt.setString(3, schedule.getStartTime());
+                pstmt.setString(4, schedule.getEndTime());
+                pstmt.setString(5, schedule.getStartTime());
+                pstmt.setString(6, schedule.getEndTime());
+                pstmt.setString(7, schedule.getStartTime());
+                pstmt.setString(8, schedule.getEndTime());
+                pstmt.setInt(9, resource.getResourceId());
 
                 ResultSet rs = pstmt.executeQuery();
                 if (rs.next()) {
-                    int availableQuantity = rs.getInt("available_quantity");
-                    if (availableQuantity < resource.getQuantityNeeded()) {
+                    int resourcesInUse = rs.getInt("resources_in_use");
+                    String resourceType = ResourceDAO.getResourceById(resource.getResourceId()).getResourceType();
+                    int totalResources = 50; // Total pool of each resource type
+
+                    System.out.println("Resource check for " + resourceType + ":");
+                    System.out.println("- Resources in use: " + resourcesInUse);
+                    System.out.println("- Resources available: " + (totalResources - resourcesInUse));
+
+                    if (resourcesInUse >= totalResources) {
                         return new ValidationResult(false,
-                                "Insufficient resources available. Need " + resource.getQuantityNeeded() +
-                                        " but only " + availableQuantity + " available.");
+                                "No " + resourceType + "s available for this time slot. All " + totalResources +
+                                        " are in use. Please choose a different time.");
                     }
                 }
             }

@@ -311,9 +311,16 @@ public class ScheduleDialog extends JDialog implements ActionListener {
     }
 
     private void updateAvailableResources() {
-        String room = roomField.getText().trim();
-        if (!room.isEmpty()) {
-            availableResources = ResourceDAO.getAvailableResources(room);
+        System.out.println("\nUpdating available resources from pool");
+        availableResources = ResourceDAO.getAvailableResources("POOL");
+        if (availableResources != null) {
+            System.out.println("Found " + availableResources.size() + " available resources in pool:");
+            for (Resource resource : availableResources) {
+                System.out.println("- " + resource.getResourceType() + " (ID: " + resource.getResourceId() +
+                        "), quantity: " + resource.getQuantity());
+            }
+        } else {
+            System.out.println("No resources found in pool");
         }
     }
 
@@ -440,13 +447,19 @@ public class ScheduleDialog extends JDialog implements ActionListener {
     }
 
     private Resource findResource(String type) {
+        System.out.println("Looking for resource type '" + type + "' in pool");
         if (availableResources != null) {
             for (Resource resource : availableResources) {
-                if (resource.getResourceType().equals(type)) {
+                System.out.println("Checking resource: " + resource.getResourceType() + " in pool");
+                if (resource.getResourceType().equals(type) && resource.getRoom().equals("POOL")) {
+                    System.out.println("Found matching resource with ID: " + resource.getResourceId());
                     return resource;
                 }
             }
+        } else {
+            System.out.println("No available resources loaded");
         }
+        System.out.println("Resource type '" + type + "' not found in pool");
         return null;
     }
 
