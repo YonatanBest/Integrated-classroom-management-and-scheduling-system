@@ -5,7 +5,9 @@ import com.classroom.model.User;
 import com.classroom.model.Course;
 import com.classroom.dao.CourseDAO;
 import com.classroom.dao.ScheduleDAO;
+import com.classroom.dao.UserDAO;
 import com.classroom.util.DatabaseUtil;
+import com.classroom.ui.components.MakeupRequestPanel;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -64,6 +66,12 @@ public class StudentDashboard extends JFrame {
 
         tabbedPane.addTab("Schedule", new ImageIcon(), new JScrollPane(calendarPanel), "View your weekly schedule");
         tabbedPane.addTab("My Courses", new ImageIcon(), new JScrollPane(coursesPanel), "View your enrolled courses");
+
+        // Add Makeup tab if user is a room representative
+        if (UserDAO.isRoomRep(currentUser.getUserId())) {
+            tabbedPane.addTab("Makeup", new ImageIcon(), new MakeupRequestPanel(currentUser), "Request makeup classes");
+        }
+
         tabbedPane.addTab("Profile", new ImageIcon(), new JScrollPane(profilePanel), "View and edit your profile");
 
         // Add components to main panel

@@ -7,6 +7,7 @@ import com.classroom.model.Course;
 import com.classroom.model.Schedule;
 import com.classroom.model.User;
 import com.classroom.ui.components.CalendarPanel;
+import com.classroom.ui.components.RepresentativeManagementPanel;
 import com.classroom.util.ColorScheme;
 import com.classroom.util.UIUtils;
 
@@ -86,6 +87,8 @@ public class CoordinatorDashboard extends JFrame implements ActionListener {
         tabbedPane.addTab("Manage Schedules", new ImageIcon(), schedulePanel, "Add, edit or delete schedules");
         tabbedPane.addTab("Manage Courses", new ImageIcon(), coursesPanel, "Add and view courses");
         tabbedPane.addTab("Students", new ImageIcon(), studentsPanel, "View students by course");
+        tabbedPane.addTab("Representatives", new ImageIcon(), new RepresentativeManagementPanel(),
+                "Manage room representatives");
         tabbedPane.addTab("Profile", new ImageIcon(), profilePanel, "View and edit your profile");
 
         // Add components to main panel
@@ -284,8 +287,53 @@ public class CoordinatorDashboard extends JFrame implements ActionListener {
             }
         });
 
+        // Add Assign Room button
+        JButton assignRoomButton = new JButton("Assign Room");
+        UIUtils.styleButton(assignRoomButton, ColorScheme.PRIMARY);
+        assignRoomButton.addActionListener(e -> {
+            int selectedRow = studentsTable.getSelectedRow();
+            if (selectedRow == -1) {
+                JOptionPane.showMessageDialog(this,
+                        "Please select a student to assign a room",
+                        "No Selection",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            int studentId = (int) studentsTable.getValueAt(selectedRow, 0);
+            String currentRoom = (String) studentsTable.getValueAt(selectedRow, 4);
+            if (currentRoom.equals("Not Assigned")) {
+                currentRoom = "";
+            }
+
+            // Get list of available rooms
+            List<String> rooms = ScheduleDAO.getAllRooms();
+            JComboBox<String> roomCombo = new JComboBox<>(rooms.toArray(new String[0]));
+            if (!currentRoom.isEmpty()) {
+                roomCombo.setSelectedItem(currentRoom);
+            }
+
+            int result = JOptionPane.showConfirmDialog(this,
+                    new Object[] {
+                            "Select room for student:",
+                            roomCombo
+                    },
+                    "Assign Room",
+                    JOptionPane.OK_CANCEL_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+
+            if (result == JOptionPane.OK_OPTION) {
+                String selectedRoom = (String) roomCombo.getSelectedItem();
+                if (selectedRoom != null && !selectedRoom.isEmpty()) {
+                    assignRoomToStudent(studentId, selectedRoom);
+                }
+            }
+        });
+
         filterPanel.add(filterLabel);
         filterPanel.add(courseFilterCombo);
+        filterPanel.add(Box.createHorizontalStrut(10));
+        filterPanel.add(assignRoomButton);
 
         headerPanel.add(titleLabel, BorderLayout.WEST);
         headerPanel.add(filterPanel, BorderLayout.EAST);

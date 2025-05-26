@@ -309,4 +309,127 @@ public class UserDAO {
 
         return students;
     }
+
+    /**
+     * Assign a room representative.
+     */
+    public static boolean assignRoomRep(int studentId, String room) {
+        String sql = "UPDATE users SET is_room_rep = 1, assigned_room = ? WHERE user_id = ? AND user_type = 'student'";
+
+        Connection conn = null;
+        try {
+            conn = DatabaseUtil.getConnection();
+
+            // First remove any existing rep for this room
+            String removeExistingRep = "UPDATE users SET is_room_rep = 0 WHERE assigned_room = ? AND is_room_rep = 1";
+            PreparedStatement removeStmt = conn.prepareStatement(removeExistingRep);
+            removeStmt.setString(1, room);
+            removeStmt.executeUpdate();
+
+            // Then assign the new rep
+            PreparedStatement pstmt = conn.prepareStatement(sql);
+            pstmt.setString(1, room);
+            pstmt.setInt(2, studentId);
+
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                conn.commit();
+                return true;
+            }
+
+            conn.rollback();
+            return false;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+            }
+            return false;
+        } finally {
+            try {
+                if (conn != null) {
+                    conn.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * Remove a room representative.
+     */
+    public static boolean removeRoomRep(int studentId) {
+        String sql = "UPDATE users SET is_room_rep = 0 WHERE user_id = ? AND user_type = 'student'";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, studentId);
+
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                conn.commit();
+                return true;
+            }
+
+            conn.rollback();
+            return false;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Get room representative for a specific room.
+     */
+    public static User getRoomRep(String room) {
+        String sql = "SELECT * FROM users WHERE assigned_room = ? AND is_room_rep = 1 AND user_type = 'student'";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, room);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return extractUserFromResultSet(rs);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if a user is a room representative.
+     */
+    public static boolean isRoomRep(int userId) {
+        String sql = "SELECT is_room_rep FROM users WHERE user_id = ? AND user_type = 'student'";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, userId);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getBoolean("is_room_rep");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return false;
+    }
 }

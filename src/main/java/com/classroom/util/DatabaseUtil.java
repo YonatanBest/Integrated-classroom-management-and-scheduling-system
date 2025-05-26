@@ -52,6 +52,7 @@ public class DatabaseUtil {
                         email TEXT UNIQUE NOT NULL,
                         program_type TEXT,
                         assigned_room TEXT,
+                        is_room_rep BOOLEAN DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """;
@@ -66,7 +67,6 @@ public class DatabaseUtil {
                     )
                 """;
 
-        // In the createTables method, update the Schedule table creation:
         String createScheduleTable = """
                     CREATE TABLE IF NOT EXISTS Schedule (
                         schedule_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,6 +119,38 @@ public class DatabaseUtil {
                     )
                 """;
 
+        String createMakeupRequestsTable = """
+                    CREATE TABLE IF NOT EXISTS MakeupRequests (
+                        request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        room TEXT NOT NULL,
+                        course_id INTEGER NOT NULL,
+                        rep_id INTEGER NOT NULL,
+                        instructor_id INTEGER NOT NULL,
+                        requested_date DATE NOT NULL,
+                        requested_time TEXT NOT NULL,
+                        status TEXT DEFAULT 'Pending' NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (course_id) REFERENCES Courses(course_id),
+                        FOREIGN KEY (rep_id) REFERENCES Users(user_id),
+                        FOREIGN KEY (instructor_id) REFERENCES Users(user_id),
+                        CHECK (status IN ('Pending', 'Approved', 'Disapproved'))
+                    )
+                """;
+
+        String createNotificationsTable = """
+                    CREATE TABLE IF NOT EXISTS Notifications (
+                        notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        message TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        is_read BOOLEAN DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES Users(user_id),
+                        CHECK (type IN ('MakeupRequest', 'MakeupApproval', 'MakeupDisapproval'))
+                    )
+                """;
+
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(createUsersTable);
             stmt.execute(createCoursesTable);
@@ -126,6 +158,8 @@ public class DatabaseUtil {
             stmt.execute(createEnrollmentsTable);
             stmt.execute(createResourcesTable);
             stmt.execute(createScheduleResourcesTable);
+            stmt.execute(createMakeupRequestsTable);
+            stmt.execute(createNotificationsTable);
         }
     }
 
