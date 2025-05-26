@@ -8,6 +8,7 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JOptionPane;
+import java.time.LocalDate;
 
 /**
  * Data Access Object for Schedule-related database operations.
@@ -348,6 +349,16 @@ public class ScheduleDAO {
         schedule.setEndTime(rs.getString("end_time"));
         schedule.setRoom(rs.getString("room"));
         schedule.setProgramType(rs.getString("program_type"));
+
+        // Properly set status and publish date
+        String status = rs.getString("status");
+        schedule.setStatus(status != null ? status : "draft");
+
+        java.sql.Date publishDate = rs.getDate("publish_date");
+        if (publishDate != null) {
+            schedule.setPublishDate(publishDate.toString());
+        }
+
         return schedule;
     }
 
@@ -443,7 +454,7 @@ public class ScheduleDAO {
                 "JOIN Users u ON s.instructor_id = u.user_id " +
                 "WHERE s.day_of_week = ? AND s.schedule_id != ? AND " +
                 "((s.room = ? OR s.instructor_id = ?) AND " +
-                "(s.start_time < ? AND s.end_time > ?))"; // Modified condition
+                "(s.start_time < ? AND s.end_time > ?))";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -452,11 +463,23 @@ public class ScheduleDAO {
             pstmt.setInt(2, schedule.getScheduleId());
             pstmt.setString(3, schedule.getRoom());
             pstmt.setInt(4, schedule.getInstructorId());
-            pstmt.setString(5, schedule.getEndTime()); // Swapped parameter order
-            pstmt.setString(6, schedule.getStartTime()); // Swapped parameter order
+            pstmt.setString(5, schedule.getEndTime()); // Check if existing schedule starts before our end
+            pstmt.setString(6, schedule.getStartTime()); // Check if existing schedule ends after our start
+
+            System.out.println("Checking schedule conflict:");
+            System.out.println("Day: " + schedule.getDayOfWeek());
+            System.out.println("Time: " + schedule.getStartTime() + " - " + schedule.getEndTime());
+            System.out.println("Room: " + schedule.getRoom());
+            System.out.println("Instructor ID: " + schedule.getInstructorId());
 
             try (ResultSet rs = pstmt.executeQuery()) {
-                return rs.next(); // Returns true if there's a conflict
+                boolean hasConflict = rs.next();
+                if (hasConflict) {
+                    System.out.println("Conflict found:");
+                    System.out.println(
+                            "Existing schedule: " + rs.getString("start_time") + " - " + rs.getString("end_time"));
+                }
+                return hasConflict;
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -471,7 +494,7 @@ public class ScheduleDAO {
                 "JOIN Users u ON s.instructor_id = u.user_id " +
                 "WHERE s.day_of_week = ? AND s.schedule_id != ? AND " +
                 "((s.room = ? OR s.instructor_id = ?) AND " +
-                "(? < s.end_time AND ? > s.start_time))";
+                "NOT (s.end_time <= ? OR s.start_time >= ?))";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -480,8 +503,8 @@ public class ScheduleDAO {
             pstmt.setInt(2, schedule.getScheduleId());
             pstmt.setString(3, schedule.getRoom());
             pstmt.setInt(4, schedule.getInstructorId());
-            pstmt.setString(5, schedule.getEndTime());
-            pstmt.setString(6, schedule.getStartTime());
+            pstmt.setString(5, schedule.getStartTime()); // No overlap if existing ends before or at our start
+            pstmt.setString(6, schedule.getEndTime()); // No overlap if existing starts after or at our end
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
@@ -603,18 +626,21 @@ public class ScheduleDAO {
                 "JOIN Courses c ON s.course_id = c.course_id " +
                 "JOIN Users u ON s.instructor_id = u.user_id " +
                 "WHERE s.day_of_week = ? AND " +
-                "? < s.end_time AND ? > s.start_time";
+                "NOT (s.end_time <= ? OR s.start_time >= ?)";
 
         try (Connection conn = DatabaseUtil.getConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, day);
-            pstmt.setString(2, startTime);
-            pstmt.setString(3, endTime);
+            pstmt.setString(2, startTime); // No overlap if existing ends before or at our start
+            pstmt.setString(3, endTime); // No overlap if existing starts after or at our end
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
                     Schedule schedule = extractScheduleFromResultSet(rs);
+                    schedule.setCourseName(rs.getString("course_name"));
+                    schedule.setCourseCode(rs.getString("course_code"));
+                    schedule.setInstructorName(rs.getString("instructor_name"));
                     schedule.setRequiredResources(getScheduleResources(schedule.getScheduleId()));
                     schedules.add(schedule);
                 }
@@ -693,5 +719,61 @@ public class ScheduleDAO {
         }
 
         return schedules;
+    }
+
+    /**
+     * Get all schedules in draft status.
+     */
+    public static List<Schedule> getAllDraftSchedules() {
+        List<Schedule> schedules = new ArrayList<>();
+        String sql = "SELECT s.*, c.course_name, c.course_code, u.full_name as instructor_name " +
+                "FROM Schedule s " +
+                "JOIN Courses c ON s.course_id = c.course_id " +
+                "JOIN Users u ON s.instructor_id = u.user_id " +
+                "WHERE s.status = 'draft'";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                Schedule schedule = extractScheduleFromResultSet(rs);
+                schedule.setCourseName(rs.getString("course_name"));
+                schedule.setCourseCode(rs.getString("course_code"));
+                schedule.setInstructorName(rs.getString("instructor_name"));
+                schedules.add(schedule);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return schedules;
+    }
+
+    /**
+     * Finalize a draft schedule by setting its status to published and setting the
+     * publish date.
+     */
+    public static boolean finalizeSchedule(int scheduleId, LocalDate publishDate) {
+        String sql = "UPDATE Schedule SET status = 'published', publish_date = ? WHERE schedule_id = ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setDate(1, java.sql.Date.valueOf(publishDate));
+            pstmt.setInt(2, scheduleId);
+
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                conn.commit();
+                return true;
+            }
+
+            conn.rollback();
+            return false;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 }

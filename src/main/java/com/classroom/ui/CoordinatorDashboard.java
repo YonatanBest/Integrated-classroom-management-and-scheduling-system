@@ -9,6 +9,7 @@ import com.classroom.model.User;
 import com.classroom.ui.components.CalendarPanel;
 import com.classroom.ui.components.RepresentativeManagementPanel;
 import com.classroom.ui.components.ResourceAvailabilityPanel;
+import com.classroom.ui.components.RevisionRequestManagementPanel;
 import com.classroom.util.ColorScheme;
 import com.classroom.util.UIUtils;
 
@@ -90,6 +91,8 @@ public class CoordinatorDashboard extends JFrame implements ActionListener {
         tabbedPane.addTab("Students", new ImageIcon(), studentsPanel, "View students by course");
         tabbedPane.addTab("Representatives", new ImageIcon(), new RepresentativeManagementPanel(),
                 "Manage room representatives");
+        tabbedPane.addTab("Revision Requests", new ImageIcon(), new RevisionRequestManagementPanel(),
+                "Handle schedule revision requests from instructors");
         tabbedPane.addTab("Profile", new ImageIcon(), profilePanel, "View and edit your profile");
 
         // Add components to main panel

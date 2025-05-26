@@ -27,7 +27,7 @@ public class ScheduleValidationUtil {
         }
     }
 
-    public static ValidationResult validateSchedule(Schedule schedule, List<ScheduleResource> requiredResources) {
+    public static ValidationResult validateSchedule(Schedule schedule, List<ScheduleResource> resources) {
         System.out.println("\nValidating schedule:");
         System.out.println("Course ID: " + schedule.getCourseId());
         System.out.println("Instructor ID: " + schedule.getInstructorId());
@@ -35,42 +35,50 @@ public class ScheduleValidationUtil {
         System.out.println("Time: " + schedule.getStartTime() + " - " + schedule.getEndTime());
         System.out.println("Room: " + schedule.getRoom());
         System.out.println("Program Type: " + schedule.getProgramType());
-        System.out.println("Required Resources: " + (requiredResources != null ? requiredResources.size() : "null"));
+        System.out.println("Required Resources: " + (resources != null ? resources.size() : 0));
 
-        // Check instructor availability
-        ValidationResult instructorCheck = checkInstructorAvailability(schedule);
-        if (!instructorCheck.isValid) {
-            System.out.println("Instructor validation failed: " + instructorCheck.message);
-            return instructorCheck;
+        // Validate time range
+        if (!TimeSlotUtil.isValidTimeRange(schedule.getStartTime(), schedule.getEndTime())) {
+            return new ValidationResult(false, "End time must be after start time");
         }
-        System.out.println("Instructor validation passed");
 
-        // Check room availability
-        ValidationResult roomCheck = checkRoomAvailability(schedule);
-        if (!roomCheck.isValid) {
-            System.out.println("Room validation failed: " + roomCheck.message);
-            return roomCheck;
+        // Validate program time
+        boolean isRegularProgram = schedule.getProgramType().equalsIgnoreCase("Regular");
+        if (isRegularProgram && !TimeSlotUtil.isValidRegularProgramTime(
+                schedule.getDayOfWeek(), schedule.getStartTime(), schedule.getEndTime())) {
+            return new ValidationResult(false,
+                    "Invalid time slot for regular program. Regular program hours are 8:00-17:00 on weekdays");
+        } else if (!isRegularProgram && !TimeSlotUtil.isValidEveningProgramTime(
+                schedule.getDayOfWeek(), schedule.getStartTime(), schedule.getEndTime())) {
+            return new ValidationResult(false,
+                    "Invalid time slot for evening program.\nEvening program hours are:\n" +
+                            "Weekdays: 18:00-20:00\nSaturday: 13:00-17:00\nSunday: 8:00-12:00");
         }
-        System.out.println("Room validation passed");
 
-        // Check resource availability
-        ValidationResult resourceCheck = checkResourceAvailability(schedule, requiredResources);
-        if (!resourceCheck.isValid) {
-            System.out.println("Resource validation failed: " + resourceCheck.message);
-            return resourceCheck;
+        // Check for schedule conflicts
+        String conflictDetails = ScheduleDAO.getConflictDetails(schedule);
+        if (conflictDetails != null) {
+            System.out.println("Instructor validation failed: " + conflictDetails);
+            return new ValidationResult(false, conflictDetails);
         }
-        System.out.println("Resource validation passed");
 
-        // Check credit hours
-        ValidationResult creditCheck = checkCreditHours(schedule);
-        if (!creditCheck.isValid) {
-            System.out.println("Credit hours validation failed: " + creditCheck.message);
-            return creditCheck;
+        // Validate resources if any are required
+        if (resources != null && !resources.isEmpty()) {
+            for (ScheduleResource resource : resources) {
+                if (resource.getQuantityNeeded() <= 0) {
+                    return new ValidationResult(false, "Invalid resource quantity requested");
+                }
+
+                // Check resource availability
+                if (!ResourceDAO.isResourceAvailable(resource.getResourceId(), resource.getQuantityNeeded())) {
+                    String resourceType = ResourceDAO.getResourceType(resource.getResourceId());
+                    return new ValidationResult(false,
+                            "Not enough " + resourceType + "s available for this schedule");
+                }
+            }
         }
-        System.out.println("Credit hours validation passed");
 
-        System.out.println("All validations passed successfully");
-        return new ValidationResult(true, "Schedule is valid");
+        return new ValidationResult(true, "Validation successful");
     }
 
     private static ValidationResult checkInstructorAvailability(Schedule schedule) {

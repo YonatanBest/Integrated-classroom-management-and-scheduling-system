@@ -37,14 +37,14 @@ public class Schedule {
         this.endTime = endTime;
         this.room = room;
         this.programType = programType;
-        this.status = "draft";
+        this.status = "draft"; // Default status
         this.requiredResources = new ArrayList<>();
     }
 
     // Default constructor
     public Schedule() {
         this.requiredResources = new ArrayList<>();
-        this.status = "draft";
+        this.status = "draft"; // Default status
     }
 
     // Getters and Setters
@@ -137,11 +137,16 @@ public class Schedule {
     }
 
     public String getStatus() {
-        return status;
+        return status != null ? status : "draft"; // Default to draft if null
     }
 
     public void setStatus(String status) {
-        this.status = status;
+        if (status != null
+                && (status.equals("draft") || status.equals("published") || status.equals("revision_requested"))) {
+            this.status = status;
+        } else {
+            this.status = "draft"; // Default to draft for invalid values
+        }
     }
 
     public String getPublishDate() {
@@ -153,15 +158,15 @@ public class Schedule {
     }
 
     public boolean isDraft() {
-        return "draft".equals(status);
+        return "draft".equals(getStatus());
     }
 
     public boolean isPublished() {
-        return "published".equals(status);
+        return "published".equals(getStatus());
     }
 
     public boolean isRevisionRequested() {
-        return "revision_requested".equals(status);
+        return "revision_requested".equals(getStatus());
     }
 
     @Override

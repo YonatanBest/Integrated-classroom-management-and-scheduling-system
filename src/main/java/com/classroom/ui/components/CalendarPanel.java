@@ -20,7 +20,8 @@ public class CalendarPanel extends JPanel {
     private JLabel titleLabel;
     private JComboBox<String> programTypeFilter;
     private JComboBox<String> roomFilter;
-    private String selectedRoom; // Add this field to store the selected room value
+    private JComboBox<String> statusFilter;
+    private String selectedRoom;
 
     // Time slots
     private static final String[] REGULAR_TIMES = {
@@ -69,13 +70,16 @@ public class CalendarPanel extends JPanel {
         programTypeFilter = new JComboBox<>(new String[] { "All", "Regular", "Evening" });
         programTypeFilter.addActionListener(e -> refreshCalendar());
 
+        // Status filter
+        JLabel statusLabel = new JLabel("Status:");
+        statusFilter = new JComboBox<>(new String[] { "All", "Published", "Draft" });
+        statusFilter.addActionListener(e -> refreshCalendar());
+
         // Room filter (only for coordinator)
         if (!currentUser.isStudent()) {
             JLabel roomLabel = new JLabel("Room:");
-            roomFilter = new JComboBox<>(); // Fix: Properly initialize JComboBox
-            // Add "All Rooms" option
+            roomFilter = new JComboBox<>();
             roomFilter.addItem("All Rooms");
-            // Add all available rooms
             List<String> rooms = ScheduleDAO.getAllRooms();
             for (String room : rooms) {
                 roomFilter.addItem(room);
@@ -88,6 +92,8 @@ public class CalendarPanel extends JPanel {
 
         filterPanel.add(filterLabel);
         filterPanel.add(programTypeFilter);
+        filterPanel.add(statusLabel);
+        filterPanel.add(statusFilter);
 
         titlePanel.add(titleLabel, BorderLayout.WEST);
         titlePanel.add(filterPanel, BorderLayout.EAST);
@@ -101,7 +107,7 @@ public class CalendarPanel extends JPanel {
     }
 
     public void setRoomFilter(String room) {
-        this.selectedRoom = room; // Store the room value in the new field
+        this.selectedRoom = room;
         if (roomFilter != null && room != null) {
             roomFilter.setSelectedItem(room);
         }
@@ -172,6 +178,12 @@ public class CalendarPanel extends JPanel {
         // Filter by program type if needed
         if (!"All".equals(programType)) {
             schedules.removeIf(s -> !s.getProgramType().equalsIgnoreCase(programType));
+        }
+
+        // Filter by status if needed
+        String selectedStatus = (String) statusFilter.getSelectedItem();
+        if (!"All".equals(selectedStatus)) {
+            schedules.removeIf(s -> !s.getStatus().equalsIgnoreCase(selectedStatus.toLowerCase()));
         }
 
         // Create a map to store schedules by day and time
@@ -351,8 +363,18 @@ public class CalendarPanel extends JPanel {
             return panel;
         }
 
+        // Set background color based on status
+        if (schedule.isDraft()) {
+            panel.setBackground(new Color(255, 253, 235)); // Light yellow for drafts
+        } else if (schedule.isPublished()) {
+            panel.setBackground("regular".equalsIgnoreCase(schedule.getProgramType()) ? new Color(220, 237, 200)
+                    : new Color(213, 232, 212));
+        } else if (schedule.isRevisionRequested()) {
+            panel.setBackground(new Color(255, 235, 235)); // Light red for revision requested
+        }
+
         // For coordinator viewing all rooms, check for overlapping schedules
-        if (!currentUser.isStudent() && "All Rooms".equals(roomFilter.getSelectedItem())) {
+        if (!currentUser.isStudent() && roomFilter != null && "All Rooms".equals(roomFilter.getSelectedItem())) {
             List<Schedule> overlappingSchedules = ScheduleDAO.getSchedulesInTimeRange(
                     schedule.getDayOfWeek(), schedule.getStartTime(), schedule.getEndTime());
 
@@ -379,10 +401,6 @@ public class CalendarPanel extends JPanel {
             }
         }
 
-        // Single schedule display
-        panel.setBackground("regular".equalsIgnoreCase(schedule.getProgramType()) ? new Color(220, 237, 200)
-                : new Color(213, 232, 212));
-
         JPanel coursePanel = createCourseInfoPanel(schedule);
         panel.add(coursePanel);
 
@@ -404,6 +422,14 @@ public class CalendarPanel extends JPanel {
         JLabel roomLabel = new JLabel("Room: " + schedule.getRoom());
         roomLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
 
+        // Add status indicator if not published
+        if (!schedule.isPublished()) {
+            JLabel statusLabel = new JLabel(schedule.getStatus().toUpperCase());
+            statusLabel.setFont(new Font("Segoe UI", Font.ITALIC, 10));
+            statusLabel.setForeground(schedule.isDraft() ? new Color(184, 134, 11) : Color.RED);
+            panel.add(statusLabel);
+        }
+
         panel.add(courseLabel);
         panel.add(timeLabel);
         panel.add(roomLabel);
@@ -416,7 +442,8 @@ public class CalendarPanel extends JPanel {
                                 "Time: %s - %s<br>" +
                                 "Room: %s<br>" +
                                 "Instructor: %s<br>" +
-                                "Program: %s</html>",
+                                "Program: %s<br>" +
+                                "Status: %s%s</html>",
                         schedule.getCourseCode(),
                         schedule.getCourseName(),
                         schedule.getStartTime(),
@@ -424,7 +451,12 @@ public class CalendarPanel extends JPanel {
                         schedule.getRoom(),
                         schedule.getInstructorName(),
                         schedule.getProgramType().substring(0, 1).toUpperCase() +
-                                schedule.getProgramType().substring(1));
+                                schedule.getProgramType().substring(1),
+                        schedule.getStatus().substring(0, 1).toUpperCase() +
+                                schedule.getStatus().substring(1),
+                        schedule.isPublished() && schedule.getPublishDate() != null
+                                ? "<br>Publish Date: " + schedule.getPublishDate()
+                                : "");
 
                 JOptionPane.showMessageDialog(
                         CalendarPanel.this,

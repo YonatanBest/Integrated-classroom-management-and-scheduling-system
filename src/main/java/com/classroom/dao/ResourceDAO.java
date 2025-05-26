@@ -134,4 +134,43 @@ public class ResourceDAO {
         }
         return null;
     }
+
+    public static boolean isResourceAvailable(int resourceId, int quantityNeeded) {
+        String sql = "SELECT quantity FROM Resources WHERE resource_id = ? AND status = 'Available'";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, resourceId);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    int availableQuantity = rs.getInt("quantity");
+                    return availableQuantity >= quantityNeeded;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public static String getResourceType(int resourceId) {
+        String sql = "SELECT resource_type FROM Resources WHERE resource_id = ?";
+
+        try (Connection conn = DatabaseUtil.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, resourceId);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("resource_type");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return "Unknown";
+    }
 }
